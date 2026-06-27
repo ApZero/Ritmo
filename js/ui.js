@@ -114,3 +114,19 @@ export function icon(name) {
   const span = el('span', { html: ICONS[name] || '' });
   return span.firstChild;
 }
+
+/**
+ * Fila de atajos de fecha (ej. próximos fines de semana / feriados). `items`
+ * es [{date:'YYYY-MM-DD', label, type}]; al tocar uno se llama onPick(date).
+ */
+export function buildDateQuickPicks(items, onPick) {
+  if (!items || !items.length) return el('div');
+  const wrap = el('div', { class: 'chiprow', style: 'padding:0 0 10px;' });
+  for (const it of items) {
+    const emoji = it.type === 'weekend' ? '🌤️' : (it.type === 'libre' ? '🌿' : '📌');
+    const chip = el('button', { class: 'chip', type: 'button' }, `${emoji} ${formatDateEs(it.date)} · ${it.label}`);
+    chip.addEventListener('click', (e) => { e.preventDefault(); onPick(it.date); });
+    wrap.appendChild(chip);
+  }
+  return wrap;
+}

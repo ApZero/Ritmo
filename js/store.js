@@ -57,6 +57,7 @@ function defaultData() {
     ],
     tasks: [],
     projects: [],
+    specialDays: [], // feriados / días libres puntuales — los fines de semana se calculan, no se guardan
   };
 }
 
@@ -84,6 +85,7 @@ function migrate(data) {
   data.categories = data.categories || [];
   data.tasks = data.tasks || [];
   data.projects = data.projects || [];
+  data.specialDays = data.specialDays || [];
   return data;
 }
 
@@ -131,7 +133,7 @@ export function deleteCategory(id) {
 // ---------- pasos recursivos (subtareas de tareas y de proyectos) ----------
 
 export function newStep(title) {
-  return { id: uid(), title, completed: false, completedAt: null, estimatedMinutes: 0, notes: '', children: [] };
+  return { id: uid(), title, completed: false, completedAt: null, dueDate: null, estimatedMinutes: 0, notes: '', children: [] };
 }
 
 function walkSteps(steps, fn) {
@@ -167,6 +169,22 @@ export function toggleStepCompleted(rootSteps, stepId, completed) {
   if (step.children && step.children.length) {
     walkSteps(step.children, s => { s.completed = completed; s.completedAt = completed ? nowISO() : null; });
   }
+}
+
+/** Todos los pasos (de cualquier proyecto) que tienen una fecha asignada, con
+ * referencia a su proyecto. Usado para que el dashboard y el calendario
+ * muestren los pasos de proyecto junto con las tareas. */
+export function listAllStepsWithDates({ includeCompleted = false } = {}) {
+  const out = [];
+  for (const project of load().projects) {
+    if (project.archived) continue;
+    walkSteps(project.steps, (step) => {
+      if (!step.dueDate) return;
+      if (!includeCompleted && step.completed) return;
+      out.push({ project, step });
+    });
+  }
+  return out;
 }
 
 // ---------- tareas (todo + recurrentes, unificadas) ----------
@@ -267,6 +285,93 @@ export function postponeTask(id, newDueDate) {
   return updateTask(id, { currentDueDate: newDueDate });
 }
 
+/** Edita una entrada del historial (fecha de finalización, fecha que vencía, o comentario). */
+export function updateTaskHistoryEntry(taskId, index, patch) {
+  const task = getTask(taskId);
+  if (!task || !task.history[index]) return null;
+  Object.assign(task.history[index], patch);
+  task.history.sort((a, b) => (a.completedAt || '').localeCompare(b.completedAt || ''));
+  task.updatedAt = nowISO();
+  save();
+  return task;
+}
+
+export function deleteTaskHistoryEntry(taskId, index) {
+  const task = getTask(taskId);
+  if (!task || !task.history[index]) return null;
+  task.history.splice(index, 1);
+  task.updatedAt = nowISO();
+  save();
+  return task;
+}
+
+/** Agrega una finalización pasada SIN tocar currentDueDate — para registrar
+ * algo que ya pasó (a veces ya cubierto por el ciclo vigente) sin alterar la
+ * próxima fecha programada. */
+export function addManualHistoryEntry(taskId, { completedAt, dueDate, comment }) {
+  const task = getTask(taskId);
+  if (!task) return null;
+  task.history.push({ dueDate: dueDate || null, completedAt, comment: comment || '' });
+  task.history.sort((a, b) => (a.completedAt || '').localeCompare(b.completedAt || ''));
+  task.updatedAt = nowISO();
+  save();
+  return task;
+}
+
+// ---------- días especiales (feriados / días libres) ----------
+// Los fines de semana se calculan al vuelo (isWeekend), no se guardan acá.
+
+export function listSpecialDays() { return load().specialDays.slice().sort((a, b) => a.date.localeCompare(b.date)); }
+export function getSpecialDay(dateStr) { return load().specialDays.find(d => d.date === dateStr) || null; }
+export function createSpecialDay({ date, label, type }) {
+  const data = load();
+  const entry = { id: uid(), date, label: label || 'Día libre', type: type || 'feriado' };
+  data.specialDays.push(entry);
+  save();
+  return entry;
+}
+export function updateSpecialDay(id, patch) {
+  const data = load();
+  const entry = data.specialDays.find(d => d.id === id);
+  if (!entry) return null;
+  Object.assign(entry, patch);
+  save();
+  return entry;
+}
+export function deleteSpecialDay(id) {
+  const data = load();
+  data.specialDays = data.specialDays.filter(d => d.id !== id);
+  save();
+}
+
+function dateOnlyLocal(y, m0, d) { return new Date(y, m0, d); }
+function toISO(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+
+export function isWeekend(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dow = dateOnlyLocal(y, m - 1, d).getDay();
+  return dow === 0 || dow === 6;
+}
+
+/**
+ * Próximos "días especiales" (fines de semana + feriados/días libres puntuales)
+ * a partir de hoy — para ofrecer como atajos al elegir una fecha.
+ */
+export function getUpcomingSpecialDays({ from, days = 30, limit = 8 } = {}) {
+  const start = from ? new Date(from) : new Date();
+  const manual = load().specialDays;
+  const out = [];
+  for (let i = 0; i < days && out.length < limit; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    const dateStr = toISO(d);
+    const manualEntry = manual.find(m => m.date === dateStr);
+    const weekend = d.getDay() === 0 || d.getDay() === 6;
+    if (manualEntry) out.push({ date: dateStr, label: manualEntry.label, type: manualEntry.type });
+    else if (weekend) out.push({ date: dateStr, label: d.getDay() === 6 ? 'Sábado' : 'Domingo', type: 'weekend' });
+  }
+  return out;
+}
+
 // ---------- proyectos ----------
 
 export function listProjects() { return load().projects; }
@@ -333,6 +438,7 @@ export function importBackup(json, { replace = true } = {}) {
     current.categories = mergeById(current.categories, incoming.categories);
     current.tasks = mergeById(current.tasks, incoming.tasks);
     current.projects = mergeById(current.projects, incoming.projects);
+    current.specialDays = mergeById(current.specialDays, incoming.specialDays || []);
     _cache = current;
   }
   save();

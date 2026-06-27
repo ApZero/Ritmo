@@ -9,6 +9,7 @@ import * as Calendario from './views/calendar.js';
 import * as Estadisticas from './views/stats.js';
 import * as Categorias from './views/categories.js';
 import * as Ajustes from './views/settings.js';
+import * as Holidays from './views/holidays.js';
 
 const VIEW = document.getElementById('view');
 const SUBTITLE = document.getElementById('topbar-subtitle');
@@ -27,6 +28,7 @@ const SUBVIEWS = {
   estadisticas: Estadisticas,
   categorias: Categorias,
   ajustes: Ajustes,
+  diasespeciales: Holidays,
 };
 
 let current = 'hoy';
@@ -39,6 +41,7 @@ function renderMas() {
   const items = [
     ['estadisticas', '📊', 'Estadísticas', 'Rachas, cumplimiento y promedios'],
     ['categorias', '🏷️', 'Categorías', 'Crear, editar, tiempos estimados'],
+    ['diasespeciales', '🗓️', 'Días especiales', 'Feriados, días libres y fines de semana'],
     ['ajustes', '⚙️', 'Ajustes', 'Clima, notificaciones, respaldo'],
   ];
   for (const [id, emoji, title, desc] of items) {
@@ -59,7 +62,7 @@ export function navigateTo(viewId) {
   renderTabbar();
   const titleMap = {
     hoy: '', tareas: '', proyectos: '', calendario: '',
-    mas: 'Más', estadisticas: 'Estadísticas', categorias: 'Categorías', ajustes: 'Ajustes',
+    mas: 'Más', estadisticas: 'Estadísticas', categorias: 'Categorías', ajustes: 'Ajustes', diasespeciales: 'Días especiales',
   };
   SUBTITLE.textContent = titleMap[viewId]
     ? titleMap[viewId]
