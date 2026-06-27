@@ -1,9 +1,10 @@
 // ritmo/js/views/tasks.js
-import { el, openSheet, closeSheet, toast, escapeHtml, formatMinutes, todayISO, formatDateEs } from '../ui.js';
+import { el, openSheet, closeSheet, toast, escapeHtml, formatMinutes, todayISO, formatDateEs, buildDateQuickPicks } from '../ui.js';
 import * as Store from '../store.js';
 import * as R from '../recurrence.js';
 import * as Push from '../push.js';
 import { renderStepTree } from './stepTree.js';
+import { taskStats } from './stats.js';
 
 // ---------- estado de filtros (vive mientras la app esté abierta) ----------
 const state = {
@@ -182,7 +183,9 @@ function renderCard(t, sectionId) {
   if (t.type !== 'once') {
     const actions = el('div', { style: 'display:flex;gap:14px;margin-top:8px;padding-left:36px;' });
     const commentBtn = el('button', { class: 'btn-ghost', style: 'padding:0;font-size:12px;', onClick: (e) => { e.stopPropagation(); openCommentSheet(t); } }, t.pendingComment ? '✏️ Editar comentario' : '💬 Agregar comentario');
+    const historyBtn = el('button', { class: 'btn-ghost', style: 'padding:0;font-size:12px;', onClick: (e) => { e.stopPropagation(); openHistorySheet(t); } }, `🕓 Historial${t.history?.length ? ` (${t.history.length})` : ''}`);
     actions.appendChild(commentBtn);
+    actions.appendChild(historyBtn);
     card.appendChild(actions);
   }
 
@@ -249,6 +252,134 @@ function handleDelete(t) {
   toast('Tarea eliminada');
 }
 
+// ---------- historial: ver, editar y registrar finalizaciones pasadas ----------
+
+function openHistorySheet(t) {
+  const container = el('div');
+  let showAddForm = false;
+
+  function miniStat(num, label) {
+    return el('div', { class: 'stat-box' }, [el('div', { class: 'num', style: 'font-size:17px;' }, String(num)), el('div', { class: 'label' }, label)]);
+  }
+
+  function rebuild() {
+    container.innerHTML = '';
+    const s = taskStats(t);
+    container.appendChild(el('div', { class: 'stat-grid', style: 'padding:0;margin-bottom:14px;' }, [
+      miniStat(s.count, 'Finalizaciones'),
+      miniStat(s.onTimeRate !== null ? `${s.onTimeRate}%` : '—', 'A tiempo'),
+      miniStat(s.streak, 'Racha actual'),
+      miniStat(s.avgLatenessDays > 0 ? `${s.avgLatenessDays} d` : '—', 'Demora prom.'),
+    ]));
+
+    if (!showAddForm) {
+      const addBtn = el('button', { class: 'btn btn-secondary', style: 'margin-bottom:14px;' }, '+ Registrar finalización');
+      addBtn.addEventListener('click', () => { showAddForm = true; rebuild(); });
+      container.appendChild(addBtn);
+    } else {
+      container.appendChild(buildAddForm());
+    }
+
+    const entries = t.history || [];
+    if (!entries.length) {
+      container.appendChild(el('div', { class: 'empty-state' }, 'Todavía no hay finalizaciones registradas.'));
+    } else {
+      entries.slice().reverse().forEach((h, revIdx) => container.appendChild(renderEntry(h, entries.length - 1 - revIdx)));
+    }
+  }
+
+  function buildAddForm() {
+    const wrap = el('div', { class: 'card', style: 'margin-bottom:14px;' });
+    const dateInput = el('input', { type: 'date', value: todayISO() });
+    const commentInput = el('textarea', { placeholder: 'Comentario (opcional)…' });
+    let closesPending = true;
+    const toggle = el('button', { class: 'chip active', type: 'button' }, '✓ Cierra la iteración pendiente');
+    toggle.addEventListener('click', () => {
+      closesPending = !closesPending;
+      toggle.className = 'chip' + (closesPending ? ' active' : '');
+      toggle.textContent = (closesPending ? '✓ ' : '') + 'Cierra la iteración pendiente';
+    });
+    const saveBtn = el('button', { class: 'btn btn-primary' }, 'Guardar');
+    saveBtn.addEventListener('click', () => {
+      if (!dateInput.value) { toast('Elegí una fecha.'); return; }
+      const [y, m, d] = dateInput.value.split('-').map(Number);
+      const completionDate = new Date(y, m - 1, d, 12, 0, 0);
+      if (closesPending) {
+        const updated = Store.completeTask(t.id, { completionDate, comment: commentInput.value, computeNextDueDate: R.computeNextDueDate });
+        Push.syncTaskReminder(updated.id);
+      } else {
+        Store.addManualHistoryEntry(t.id, { completedAt: `${dateInput.value}T12:00:00`, dueDate: t.currentDueDate, comment: commentInput.value });
+      }
+      showAddForm = false;
+      toast('Finalización registrada');
+      rebuild();
+    });
+    const cancelBtn = el('button', { class: 'btn btn-ghost' }, 'Cancelar');
+    cancelBtn.addEventListener('click', () => { showAddForm = false; rebuild(); });
+
+    wrap.appendChild(el('div', { class: 'field' }, [el('label', {}, 'Fecha en que lo hiciste'), dateInput]));
+    wrap.appendChild(buildDateQuickPicks(Store.getUpcomingSpecialDays({ from: new Date(Date.now() - 13 * 86400000), days: 21, limit: 6 }), (d) => { dateInput.value = d; }));
+    wrap.appendChild(el('div', { class: 'field' }, [el('label', {}, 'Comentario'), commentInput]));
+    wrap.appendChild(toggle);
+    wrap.appendChild(el('div', { style: 'font-size:11.5px;color:var(--ink-soft);margin:8px 0 0;' },
+      'Si lo desmarcás, queda solo como registro para las estadísticas y no cambia tu próximo vencimiento.'));
+    wrap.appendChild(el('div', { class: 'btn-row' }, [saveBtn, cancelBtn]));
+    return wrap;
+  }
+
+  function renderEntry(h, idx) {
+    const late = h.dueDate && h.completedAt && h.completedAt.slice(0, 10) > h.dueDate;
+    const card = el('div', { class: 'card', style: 'margin-bottom:8px;' });
+    let editing = false;
+
+    function buildCard() {
+      card.innerHTML = '';
+      if (!editing) {
+        card.appendChild(el('div', { class: 'card-row', style: 'justify-content:space-between;align-items:flex-start;' }, [
+          el('div', {}, [
+            el('div', { style: 'font-size:13.5px;font-weight:600;' }, `Hecho: ${formatDateEs(h.completedAt ? h.completedAt.slice(0, 10) : null)}`),
+            el('div', { style: 'font-size:12px;color:var(--ink-soft);' }, `Vencía: ${h.dueDate ? formatDateEs(h.dueDate) : '—'}`),
+            h.comment ? el('div', { class: 'card-comment', style: 'margin-top:6px;' }, `💬 ${escapeHtml(h.comment)}`) : null,
+          ]),
+          el('span', { class: 'tag-pill', style: `color:#fff;background:${late ? 'var(--ochre)' : 'var(--olive)'}` }, late ? 'Tarde' : 'A tiempo'),
+        ]));
+        card.appendChild(el('div', { style: 'display:flex;gap:14px;margin-top:6px;' }, [
+          el('button', { class: 'btn-ghost', style: 'padding:0;font-size:12px;', onClick: () => { editing = true; buildCard(); } }, '✏️ Editar'),
+          el('button', { class: 'btn-ghost', style: 'padding:0;font-size:12px;color:var(--terracotta);', onClick: () => {
+            if (!confirm('¿Eliminar esta entrada del historial?')) return;
+            Store.deleteTaskHistoryEntry(t.id, idx);
+            rebuild();
+          } }, '🗑 Eliminar'),
+        ]));
+      } else {
+        const completedInput = el('input', { type: 'date', value: h.completedAt ? h.completedAt.slice(0, 10) : '' });
+        const dueInput = el('input', { type: 'date', value: h.dueDate || '' });
+        const commentInput = el('textarea', {}, h.comment || '');
+        const saveBtn = el('button', { class: 'btn btn-primary' }, 'Guardar');
+        saveBtn.addEventListener('click', () => {
+          Store.updateTaskHistoryEntry(t.id, idx, {
+            completedAt: completedInput.value ? `${completedInput.value}T12:00:00` : h.completedAt,
+            dueDate: dueInput.value || null,
+            comment: commentInput.value,
+          });
+          rebuild();
+        });
+        const cancelBtn = el('button', { class: 'btn btn-ghost' }, 'Cancelar');
+        cancelBtn.addEventListener('click', () => { editing = false; buildCard(); });
+        card.appendChild(el('div', { class: 'field' }, [el('label', {}, 'Se hizo el'), completedInput]));
+        card.appendChild(el('div', { class: 'field' }, [el('label', {}, 'Vencía el'), dueInput]));
+        card.appendChild(el('div', { class: 'field' }, [el('label', {}, 'Comentario'), commentInput]));
+        card.appendChild(el('div', { class: 'btn-row' }, [saveBtn, cancelBtn]));
+      }
+    }
+    buildCard();
+    return card;
+  }
+
+  rebuild();
+  openSheet(container, { title: `Historial — ${t.title}` });
+}
+
 // ---------- formulario crear/editar ----------
 
 function defaultRule() {
@@ -292,6 +423,7 @@ function openTaskForm(existing) {
       const dateInput = el('input', { type: 'date', value: t.dueDate || '' });
       dateInput.addEventListener('change', () => { t.dueDate = dateInput.value || null; });
       dynamic.appendChild(el('div', { class: 'field' }, [el('label', {}, 'Fecha (opcional)'), dateInput]));
+      dynamic.appendChild(buildDateQuickPicks(Store.getUpcomingSpecialDays({ limit: 6 }), (d) => { dateInput.value = d; t.dueDate = d; }));
 
       const prioSeg = el('div', { class: 'segmented' });
       for (const [val, label] of [['low', 'Baja'], ['normal', 'Normal'], ['high', 'Alta']]) {
@@ -311,6 +443,7 @@ function openTaskForm(existing) {
         const reprogInput = el('input', { type: 'date', value: t.currentDueDate || '' });
         reprogInput.addEventListener('change', () => { t.currentDueDate = reprogInput.value || t.currentDueDate; });
         dynamic.appendChild(el('div', { class: 'field' }, [el('label', {}, 'Reprogramar próximo vencimiento'), reprogInput]));
+        dynamic.appendChild(buildDateQuickPicks(Store.getUpcomingSpecialDays({ limit: 6 }), (d) => { reprogInput.value = d; t.currentDueDate = d; }));
       }
     }
     dynamic.appendChild(buildReminderSection(t));
@@ -496,6 +629,7 @@ function buildRuleBuilder(t) {
       const anchorInput = el('input', { type: 'date', value: rule.anchorDate || todayISO() });
       anchorInput.addEventListener('change', () => { rule.anchorDate = anchorInput.value; updateSummary(); });
       sub.appendChild(el('div', { class: 'field' }, [el('label', {}, 'A partir de'), anchorInput]));
+      sub.appendChild(buildDateQuickPicks(Store.getUpcomingSpecialDays({ limit: 6 }), (d) => { anchorInput.value = d; rule.anchorDate = d; updateSummary(); }));
     }
     updateSummary();
   }
@@ -508,6 +642,7 @@ function buildRuleBuilder(t) {
     const startInput = el('input', { type: 'date', value: rule.anchorDate || todayISO() });
     startInput.addEventListener('change', () => { rule.anchorDate = startInput.value; });
     wrap.appendChild(el('div', { class: 'field' }, [el('label', {}, 'Primer vencimiento'), startInput]));
+    wrap.appendChild(buildDateQuickPicks(Store.getUpcomingSpecialDays({ limit: 6 }), (d) => { startInput.value = d; rule.anchorDate = d; }));
   }
   wrap.appendChild(summaryEl);
   return wrap;

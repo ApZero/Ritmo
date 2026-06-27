@@ -7,9 +7,38 @@ import * as Weather from '../weather.js';
 
 export const fab = null;
 
+// Normaliza tareas y pasos de proyecto a una forma común para mostrarlos juntos.
+function toItem(entry) {
+  if (entry.step) {
+    const { project, step } = entry;
+    return {
+      kind: 'step', id: step.id, title: step.title, due: step.dueDate, estimatedMinutes: step.estimatedMinutes || 0,
+      pillLabel: `📁 ${project.title}`, pillColor: 'var(--teal)',
+      onComplete: () => { Store.toggleStepCompleted(project.steps, step.id, true); Store.save(); },
+    };
+  }
+  const t = entry;
+  const cat = t.categoryId ? Store.getCategory(t.categoryId) : null;
+  return {
+    kind: 'task', id: t.id, title: t.title, due: t.type === 'once' ? t.dueDate : t.currentDueDate, estimatedMinutes: t.estimatedMinutes || 0,
+    pillLabel: cat ? `${cat.icon || ''} ${cat.name}` : null, pillColor: cat?.color,
+    onComplete: () => {
+      if (t.type === 'once') { Store.completeTask(t.id); Push.syncTaskReminder(t.id); }
+      else { const updated = Store.completeTask(t.id, { computeNextDueDate: R.computeNextDueDate }); Push.syncTaskReminder(updated.id); }
+    },
+  };
+}
+
 export async function render(container) {
   const today = R.toDateOnly(todayISO());
   const settings = Store.getSettings();
+
+  const special = Store.getSpecialDay(todayISO());
+  const weekend = Store.isWeekend(todayISO());
+  if (special || weekend) {
+    container.appendChild(el('div', { style: 'padding:0 18px 10px;' }, el('span', { class: 'tag-pill', style: 'background:var(--teal-soft);color:var(--teal);font-weight:600;' },
+      special ? `${special.type === 'feriado' ? '📌' : '🌿'} Hoy: ${special.label}` : '🌤️ Fin de semana')));
+  }
 
   const weatherSlot = el('div');
   container.appendChild(weatherSlot);
@@ -21,24 +50,23 @@ export async function render(container) {
     });
   }
 
-  const tasks = Store.listTasks().filter(t => !t.archived);
-  const dueToday = [], overdue = [], soon = [];
-  for (const t of tasks) {
-    if (t.type === 'once' && t.completed) continue;
-    const due = t.type === 'once' ? t.dueDate : t.currentDueDate;
-    if (!due) continue;
-    const status = R.classifyStatus(R.toDateOnly(due), today, settings.proximoWindowDays);
-    if (status === 'vencido') overdue.push(t);
-    else if (status === 'hoy') dueToday.push(t);
-    else if (status === 'proximo') soon.push(t);
-  }
+  const tasks = Store.listTasks().filter(t => !t.archived).filter(t => !(t.type === 'once' && t.completed));
+  const steps = Store.listAllStepsWithDates();
+  const allItems = [...tasks, ...steps].map(toItem).filter(it => it.due);
 
-  const totalMinutes = [...overdue, ...dueToday].reduce((s, t) => s + (t.estimatedMinutes || 0), 0);
+  const dueToday = [], overdue = [], soon = [];
+  for (const it of allItems) {
+    const status = R.classifyStatus(R.toDateOnly(it.due), today, settings.proximoWindowDays);
+    if (status === 'vencido') overdue.push(it);
+    else if (status === 'hoy') dueToday.push(it);
+    else if (status === 'proximo') soon.push(it);
+  }
 
   container.appendChild(el('div', { class: 'stat-grid', style: 'margin-bottom:6px;' }, [
     statBox(overdue.length, 'Vencidas', 'var(--terracotta)'),
     statBox(dueToday.length, 'Para hoy', 'var(--ochre)'),
   ]));
+  const totalMinutes = [...overdue, ...dueToday].reduce((s, it) => s + (it.estimatedMinutes || 0), 0);
   if (totalMinutes) {
     container.appendChild(el('div', { style: 'padding:6px 18px 0;color:var(--ink-soft);font-size:12.5px;' },
       `≈ ${Math.round(totalMinutes / 60 * 10) / 10} h de trabajo entre lo vencido y lo de hoy.`));
@@ -88,30 +116,19 @@ function renderWeatherCard(s, settings) {
 
 function buildList(items, status) {
   const list = el('div', { class: 'list' });
-  items
-    .slice()
-    .sort((a, b) => ((a.type === 'once' ? a.dueDate : a.currentDueDate) || '').localeCompare((b.type === 'once' ? b.dueDate : b.currentDueDate) || ''))
-    .forEach(t => list.appendChild(renderRow(t, status)));
+  items.slice().sort((a, b) => (a.due || '').localeCompare(b.due || '')).forEach(it => list.appendChild(renderRow(it, status)));
   return list;
 }
 
-function renderRow(t, status) {
-  const cat = t.categoryId ? Store.getCategory(t.categoryId) : null;
+function renderRow(it, status) {
   const card = el('div', { class: 'card' });
   card.appendChild(el('div', { class: `status-rail ${status}` }));
   const check = el('div', { class: 'check' });
   check.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6" stroke="white" fill="none" stroke-width="2.5"/></svg>';
-  check.addEventListener('click', () => {
-    if (t.type === 'once') { Store.completeTask(t.id); Push.syncTaskReminder(t.id); }
-    else {
-      const updated = Store.completeTask(t.id, { computeNextDueDate: R.computeNextDueDate });
-      Push.syncTaskReminder(updated.id);
-    }
-    toast('Listo ✓');
-  });
+  check.addEventListener('click', () => { it.onComplete(); toast('Listo ✓'); });
   const body = el('div', { class: 'card-body' }, [
-    el('div', { class: 'card-title' }, t.title),
-    el('div', { class: 'card-meta' }, cat ? [el('span', { class: 'cat-pill', style: `background:${cat.color}` }, `${cat.icon || ''} ${cat.name}`)] : []),
+    el('div', { class: 'card-title' }, it.title),
+    el('div', { class: 'card-meta' }, it.pillLabel ? [el('span', { class: 'cat-pill', style: `background:${it.pillColor || 'var(--sand)'}` }, it.pillLabel)] : []),
   ]);
   card.appendChild(el('div', { class: 'card-row' }, [check, body]));
   return card;

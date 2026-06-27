@@ -7,7 +7,7 @@
 import { el } from '../ui.js';
 import { uid, newStep } from '../store.js';
 
-export function renderStepTree(steps, { onMutate }) {
+export function renderStepTree(steps, { onMutate, showDates = false }) {
   const root = el('div', { class: 'step-tree' });
 
   function rebuild() {
@@ -51,6 +51,12 @@ export function renderStepTree(steps, { onMutate }) {
     const titleInput = el('input', { type: 'text', value: step.title, class: 'step-title' + (step.completed ? ' done' : '') });
     titleInput.addEventListener('change', () => { step.title = titleInput.value; onMutate(); });
     row.appendChild(titleInput);
+
+    if (showDates) {
+      const dateInput = el('input', { type: 'date', value: step.dueDate || '', style: 'width:128px;padding:6px 8px;font-size:12.5px;flex:0 0 auto;' });
+      dateInput.addEventListener('change', () => { step.dueDate = dateInput.value || null; onMutate(); });
+      row.appendChild(dateInput);
+    }
 
     const addChild = el('button', {
       class: 'step-add-child', title: 'Agregar subpaso',

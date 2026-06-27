@@ -7,7 +7,7 @@ export const fab = null;
 
 function daysDiff(a, b) { return R.toDateOnly(b).getTime() - R.toDateOnly(a).getTime(); }
 
-function taskStats(t) {
+export function taskStats(t) {
   const hist = t.history || [];
   if (!hist.length) return { count: 0, onTimeRate: null, streak: 0, avgLatenessDays: 0 };
   let onTime = 0, latenessSum = 0;

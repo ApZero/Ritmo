@@ -70,7 +70,8 @@ function openProjectDetail(p) {
 
   wrap.appendChild(el('div', { class: 'field', style: 'margin-top:18px;' }, [
     el('label', {}, 'Pasos'),
-    renderStepTree(p.steps, { onMutate: () => { Store.save(); updateProgress(); } }),
+    el('div', { style: 'font-size:11.5px;color:var(--ink-soft);margin:-2px 0 8px;' }, 'Si le ponés fecha a un paso, aparece junto a tus tareas en Hoy / Vencido.'),
+    renderStepTree(p.steps, { onMutate: () => { Store.save(); updateProgress(); }, showDates: true }),
   ]));
 
   const editBtn = el('button', { class: 'btn btn-secondary' }, 'Editar título / descripción / categoría');
