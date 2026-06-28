@@ -103,15 +103,31 @@ function renderWeatherCard(s, settings) {
   if (!s) {
     return el('div', { class: 'dash-card', style: 'background:var(--sand);' }, [
       el('h3', {}, '🌤️ Clima no disponible'),
-      el('p', {}, 'No se pudo conectar con el servicio de clima ahora.'),
+      el('p', { style: 'font-size:11.5px;opacity:.8;margin-top:4px;' }, 'No se pudo conectar con el servicio de clima ahora.'),
     ]);
   }
-  const tempLine = `${Math.round(s.raw.tempMin)}° – ${Math.round(s.raw.tempMax)}° · ${settings.locationLabel}`;
-  return el('div', { class: 'dash-card' }, [
+  const tempLine = `${Math.round(s.today.tempMin)}° – ${Math.round(s.today.tempMax)}° · ${settings.locationLabel}`;
+  const card = el('div', { class: 'dash-card' }, [
     el('h3', {}, s.rainy ? '🌧️ ' + tempLine : (s.veryHot ? '☀️ ' + tempLine : '🌤️ ' + tempLine)),
-    el('p', {}, s.summary),
-    el('p', { style: 'margin-top:6px;opacity:.85;' }, s.laundryNote),
+    el('div', { style: 'font-size:10.5px;opacity:.65;margin-top:5px;letter-spacing:.01em;' }, `${s.summary} ${s.laundryNote}`),
   ]);
+  card.appendChild(buildForecastStrip(s.days));
+  return card;
+}
+
+function buildForecastStrip(days) {
+  const strip = el('div', { style: 'display:flex;gap:6px;margin-top:12px;' });
+  for (const d of days.slice(0, 5)) {
+    const [y, m, dd] = d.date.split('-').map(Number);
+    const dayName = new Date(y, m - 1, dd).toLocaleDateString('es-PY', { weekday: 'short' });
+    strip.appendChild(el('div', { style: 'flex:1;background:rgba(255,255,255,.14);border-radius:10px;padding:7px 4px;text-align:center;' }, [
+      el('div', { style: 'font-size:10.5px;opacity:.8;text-transform:capitalize;' }, dayName.replace('.', '')),
+      el('div', { style: 'font-size:15px;margin:3px 0;' }, Weather.weatherEmoji(d.code)),
+      el('div', { class: 'mono', style: 'font-size:10.5px;' }, `${Math.round(d.tempMax)}°`),
+      el('div', { class: 'mono', style: 'font-size:9.5px;opacity:.7;' }, `${Math.round(d.tempMin)}°`),
+    ]));
+  }
+  return strip;
 }
 
 function buildList(items, status) {

@@ -55,11 +55,11 @@ function buildFiltersUI() {
     typeButtons.push(chip);
     typeChips.appendChild(chip);
   }
-  const hideChip = el('button', { class: 'chip' + (state.hideCompleted ? ' active' : '') }, state.hideCompleted ? '✓ Ocultando hechas' : 'Mostrar hechas');
+  const hideChip = el('button', { class: 'chip' + (state.hideCompleted ? ' active' : ''), title: 'Mostrar/ocultar completadas' }, state.hideCompleted ? '🙈' : '👁️');
   hideChip.addEventListener('click', () => {
     state.hideCompleted = !state.hideCompleted;
     hideChip.className = 'chip' + (state.hideCompleted ? ' active' : '');
-    hideChip.textContent = state.hideCompleted ? '✓ Ocultando hechas' : 'Mostrar hechas';
+    hideChip.textContent = state.hideCompleted ? '🙈' : '👁️';
     refreshSections();
   });
   typeChips.appendChild(hideChip);
@@ -149,6 +149,7 @@ function renderCard(t, sectionId) {
   const cat = t.categoryId ? Store.getCategory(t.categoryId) : null;
   const isDone = t.type === 'once' && t.completed;
   const rail = sectionId === 'completadas' ? 'a_tiempo' : sectionId;
+  const due = dueOf(t);
 
   const card = el('div', { class: 'card' });
   card.appendChild(el('div', { class: `status-rail ${rail}` }));
@@ -157,55 +158,68 @@ function renderCard(t, sectionId) {
   check.addEventListener('click', (e) => { e.stopPropagation(); handleComplete(t); });
 
   const body = el('div', { class: 'card-body' });
-  body.appendChild(el('div', { class: 'card-title' + (isDone ? ' done' : '') }, t.title));
 
-  const meta = el('div', { class: 'card-meta' });
-  if (cat) meta.appendChild(el('span', { class: 'cat-pill', style: `background:${cat.color}` }, `${cat.icon || ''} ${cat.name}`));
-  for (const tag of (t.tags || [])) meta.appendChild(el('span', { class: 'tag-pill' }, `#${tag}`));
-  if (t.estimatedMinutes) meta.appendChild(el('span', { class: 'tag-pill' }, `⏱ ${formatMinutes(t.estimatedMinutes)}`));
-  body.appendChild(meta);
-
-  const due = dueOf(t);
+  const titleRow = el('div', { style: 'display:flex;justify-content:space-between;align-items:baseline;gap:10px;' }, [
+    el('div', { class: 'card-title' + (isDone ? ' done' : ''), style: 'min-width:0;' }, t.title),
+  ]);
   if (due && sectionId !== 'completadas') {
-    body.appendChild(el('div', { class: `countdown ${sectionId}` }, R.humanizeCountdown(R.toDateOnly(due), R.toDateOnly(todayISO()))));
+    titleRow.appendChild(el('span', { class: `countdown ${sectionId}`, style: 'flex:0 0 auto;white-space:nowrap;' }, R.humanizeCountdown(R.toDateOnly(due), R.toDateOnly(todayISO()))));
   }
+  body.appendChild(titleRow);
+
+  if (cat || (t.tags || []).length || t.estimatedMinutes) {
+    const meta = el('div', { class: 'card-meta' });
+    if (cat) meta.appendChild(el('span', { class: 'cat-pill', style: `background:${cat.color}` }, `${cat.icon || ''} ${cat.name}`));
+    for (const tag of (t.tags || [])) meta.appendChild(el('span', { class: 'tag-pill' }, `#${tag}`));
+    if (t.estimatedMinutes) meta.appendChild(el('span', { class: 'tag-pill' }, `⏱ ${formatMinutes(t.estimatedMinutes)}`));
+    body.appendChild(meta);
+  }
+
   if (t.type !== 'once') {
-    body.appendChild(el('div', { style: 'font-size:12px;color:var(--ink-soft);margin-top:2px;' }, R.humanizeRule(t.rule)));
-    body.appendChild(renderRhythmStrip(t));
+    const lastEntry = (t.history || [])[t.history.length - 1];
+    const sinceText = lastEntry?.completedAt ? R.humanizeSince(R.toDateOnly(lastEntry.completedAt.slice(0, 10)), R.toDateOnly(todayISO())) : 'Sin historial aún';
+    body.appendChild(el('div', { style: 'font-size:11.5px;color:var(--ink-soft);margin-top:4px;' }, `${sinceText} · ${R.humanizeRule(t.rule)}`));
+    body.appendChild(renderFooterRow(t));
   }
+
   if (t.pendingComment) {
     body.appendChild(el('div', { class: 'card-comment' }, `💬 ${escapeHtml(t.pendingComment)}`));
   }
 
-  const row = el('div', { class: 'card-row' }, [check, body]);
-  card.appendChild(row);
-
-  if (t.type !== 'once') {
-    const actions = el('div', { style: 'display:flex;gap:14px;margin-top:8px;padding-left:36px;' });
-    const commentBtn = el('button', { class: 'btn-ghost', style: 'padding:0;font-size:12px;', onClick: (e) => { e.stopPropagation(); openCommentSheet(t); } }, t.pendingComment ? '✏️ Editar comentario' : '💬 Agregar comentario');
-    const historyBtn = el('button', { class: 'btn-ghost', style: 'padding:0;font-size:12px;', onClick: (e) => { e.stopPropagation(); openHistorySheet(t); } }, `🕓 Historial${t.history?.length ? ` (${t.history.length})` : ''}`);
-    actions.appendChild(commentBtn);
-    actions.appendChild(historyBtn);
-    card.appendChild(actions);
-  }
-
+  card.appendChild(el('div', { class: 'card-row' }, [check, body]));
   card.addEventListener('click', (e) => { if (e.target !== check && !check.contains(e.target)) openTaskForm(t); });
   return card;
 }
 
+function renderFooterRow(t) {
+  const row = el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-top:6px;' });
+  row.appendChild(renderRhythmStrip(t));
+  const actions = el('div', { style: 'display:flex;gap:4px;flex:0 0 auto;' });
+  const commentBtn = el('button', {
+    class: 'btn-ghost', style: 'padding:4px 6px;font-size:14px;line-height:1;',
+    onClick: (e) => { e.stopPropagation(); openCommentSheet(t); },
+  }, t.pendingComment ? '✏️' : '💬');
+  const historyBtn = el('button', {
+    class: 'btn-ghost', style: 'padding:4px 6px;font-size:13px;line-height:1;display:flex;align-items:center;gap:2px;',
+    onClick: (e) => { e.stopPropagation(); openHistorySheet(t); },
+  }, [el('span', { style: 'font-size:14px;' }, '🕓'), t.history?.length ? String(t.history.length) : '']);
+  actions.appendChild(commentBtn);
+  actions.appendChild(historyBtn);
+  row.appendChild(actions);
+  return row;
+}
+
 function renderRhythmStrip(t) {
-  const wrap = el('div', { class: 'rhythm-strip' });
-  const recent = (t.history || []).slice(-10);
+  const wrap = el('div', { class: 'rhythm-strip', style: 'margin-top:0;' });
+  const recent = (t.history || []).slice(-8);
   if (!recent.length) {
-    wrap.appendChild(el('span', { class: 'rhythm-label' }, 'sin historial todavía'));
+    wrap.appendChild(el('span', { class: 'rhythm-label' }, 'sin historial'));
     return wrap;
   }
   for (const h of recent) {
     const late = h.dueDate && h.completedAt && h.completedAt.slice(0, 10) > h.dueDate;
     wrap.appendChild(el('span', { class: 'rhythm-dot on' + (late ? ' late' : '') }));
   }
-  const onTimeCount = recent.filter(h => !(h.dueDate && h.completedAt && h.completedAt.slice(0, 10) > h.dueDate)).length;
-  wrap.appendChild(el('span', { class: 'rhythm-label' }, `${onTimeCount}/${recent.length} a tiempo`));
   return wrap;
 }
 
