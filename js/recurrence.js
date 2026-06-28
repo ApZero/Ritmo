@@ -229,23 +229,29 @@ export function statusLabel(status) {
   return STATUS_LABELS[status] || status;
 }
 
+function pickAmountUnit(n) {
+  if (n < 14) return [n, n === 1 ? 'día' : 'días'];
+  if (n < 60) { const a = Math.round(n / 7); return [a, a === 1 ? 'semana' : 'semanas']; }
+  if (n < 730) { const a = Math.round(n / 30.44); return [a, a === 1 ? 'mes' : 'meses']; }
+  const a = Math.round(n / 365.25); return [a, a === 1 ? 'año' : 'años'];
+}
+
 /** Texto de cuenta atrás/regresiva, ej: "En 3 días", "Vencido hace 2 semanas", "Hoy". */
 export function humanizeCountdown(dueDate, today) {
   const diff = daysBetween(today, dueDate);
   if (diff === 0) return 'Hoy';
   const past = diff < 0;
-  const n = Math.abs(diff);
-  let amount, unit;
-  if (n < 14) {
-    amount = n; unit = n === 1 ? 'día' : 'días';
-  } else if (n < 60) {
-    amount = Math.round(n / 7); unit = amount === 1 ? 'semana' : 'semanas';
-  } else if (n < 730) {
-    amount = Math.round(n / 30.44); unit = amount === 1 ? 'mes' : 'meses';
-  } else {
-    amount = Math.round(n / 365.25); unit = amount === 1 ? 'año' : 'años';
-  }
+  const [amount, unit] = pickAmountUnit(Math.abs(diff));
   return past ? `Vencido hace ${amount} ${unit}` : `En ${amount} ${unit}`;
+}
+
+/** Texto de "hace cuánto" para la última vez (siempre en el pasado), ej: "Hace 4 días", "Hoy". */
+export function humanizeSince(pastDate, today) {
+  if (!pastDate) return null;
+  const diff = daysBetween(pastDate, today);
+  if (diff <= 0) return 'Hoy';
+  const [amount, unit] = pickAmountUnit(diff);
+  return `Hace ${amount} ${unit}`;
 }
 
 /** Descripción legible de la regla en español, para mostrar en listas/formularios. */
