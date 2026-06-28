@@ -5,7 +5,9 @@
 // para que quien lo use guarde y actualice el % de progreso si corresponde.
 
 import { el } from '../ui.js';
-import { uid, newStep } from '../store.js';
+import { newStep } from '../store.js';
+
+function swap(arr, i, j) { [arr[i], arr[j]] = [arr[j], arr[i]]; }
 
 export function renderStepTree(steps, { onMutate, showDates = false }) {
   const root = el('div', { class: 'step-tree' });
@@ -52,29 +54,41 @@ export function renderStepTree(steps, { onMutate, showDates = false }) {
     titleInput.addEventListener('change', () => { step.title = titleInput.value; onMutate(); });
     row.appendChild(titleInput);
 
-    if (showDates) {
-      const dateInput = el('input', { type: 'date', value: step.dueDate || '', style: 'width:128px;padding:6px 8px;font-size:12.5px;flex:0 0 auto;' });
-      dateInput.addEventListener('change', () => { step.dueDate = dateInput.value || null; onMutate(); });
-      row.appendChild(dateInput);
+    const idx = parentArray.indexOf(step);
+    const btns = el('div', { class: 'step-btns' });
+    if (idx > 0) {
+      btns.appendChild(el('button', { class: 'step-move', title: 'Subir', onClick: () => { swap(parentArray, idx, idx - 1); mutate(); } }, '↑'));
     }
-
-    const addChild = el('button', {
+    if (idx < parentArray.length - 1) {
+      btns.appendChild(el('button', { class: 'step-move', title: 'Bajar', onClick: () => { swap(parentArray, idx, idx + 1); mutate(); } }, '↓'));
+    }
+    btns.appendChild(el('button', {
       class: 'step-add-child', title: 'Agregar subpaso',
       onClick: () => { step.children = step.children || []; step.children.push(newStep('Nuevo subpaso')); mutate(); },
-    }, '+');
-    row.appendChild(addChild);
-
-    const removeBtn = el('button', {
+    }, '+'));
+    btns.appendChild(el('button', {
       class: 'step-remove', title: 'Eliminar',
       onClick: () => {
-        const idx = parentArray.indexOf(step);
-        if (idx >= 0) parentArray.splice(idx, 1);
+        const i = parentArray.indexOf(step);
+        if (i >= 0) parentArray.splice(i, 1);
         mutate();
       },
-    }, '✕');
-    row.appendChild(removeBtn);
+    }, '✕'));
+    row.appendChild(btns);
 
     wrap.appendChild(row);
+
+    if (showDates) {
+      const dateRow = el('div', { class: 'step-date-row' });
+      const dateInput = el('input', { type: 'date', value: step.dueDate || '', class: 'step-date-input' });
+      dateInput.addEventListener('change', () => { step.dueDate = dateInput.value || null; onMutate(); });
+      dateRow.appendChild(dateInput);
+      if (step.dueDate) {
+        dateRow.appendChild(el('button', { class: 'step-add-child', onClick: () => { step.dueDate = null; mutate(); } }, 'Quitar fecha'));
+      }
+      wrap.appendChild(dateRow);
+    }
+
     if (step.children && step.children.length) {
       const childWrap = el('div', { class: 'step-children' }, renderLevel(step.children));
       wrap.appendChild(childWrap);

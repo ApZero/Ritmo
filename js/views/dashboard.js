@@ -102,21 +102,14 @@ function statBox(num, label, color) {
 function renderWeatherCard(s, settings) {
   if (!s) {
     return el('div', { class: 'dash-card', style: 'background:var(--sand);' }, [
-      el('h3', {}, '🌤️ Clima no disponible'),
-      el('p', { style: 'font-size:11.5px;opacity:.8;margin-top:4px;' }, 'No se pudo conectar con el servicio de clima ahora.'),
+      el('div', { style: 'font-size:12px;text-align:center;' }, 'Clima no disponible.'),
     ]);
   }
-  const tempLine = `${Math.round(s.today.tempMin)}° – ${Math.round(s.today.tempMax)}° · ${settings.locationLabel}`;
-  const card = el('div', { class: 'dash-card' }, [
-    el('h3', {}, s.rainy ? '🌧️ ' + tempLine : (s.veryHot ? '☀️ ' + tempLine : '🌤️ ' + tempLine)),
-    el('div', { style: 'font-size:10.5px;opacity:.65;margin-top:5px;letter-spacing:.01em;' }, `${s.summary} ${s.laundryNote}`),
-  ]);
-  card.appendChild(buildForecastStrip(s.days));
-  return card;
+  return el('div', { class: 'dash-card' }, [buildForecastStrip(s.days)]);
 }
 
 function buildForecastStrip(days) {
-  const strip = el('div', { style: 'display:flex;gap:6px;margin-top:12px;' });
+  const strip = el('div', { style: 'display:flex;gap:6px;' });
   for (const d of days.slice(0, 5)) {
     const [y, m, dd] = d.date.split('-').map(Number);
     const dayName = new Date(y, m - 1, dd).toLocaleDateString('es-PY', { weekday: 'short' });
@@ -142,10 +135,17 @@ function renderRow(it, status) {
   const check = el('div', { class: 'check' });
   check.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6" stroke="white" fill="none" stroke-width="2.5"/></svg>';
   check.addEventListener('click', () => { it.onComplete(); toast('Listo ✓'); });
+
+  const titleRow = el('div', { style: 'display:flex;justify-content:space-between;align-items:baseline;gap:10px;' }, [
+    el('div', { class: 'card-title', style: 'min-width:0;' }, it.title),
+    el('span', { class: `countdown ${status}`, style: 'flex:0 0 auto;white-space:nowrap;' }, R.humanizeCountdown(R.toDateOnly(it.due), today())),
+  ]);
   const body = el('div', { class: 'card-body' }, [
-    el('div', { class: 'card-title' }, it.title),
+    titleRow,
     el('div', { class: 'card-meta' }, it.pillLabel ? [el('span', { class: 'cat-pill', style: `background:${it.pillColor || 'var(--sand)'}` }, it.pillLabel)] : []),
   ]);
   card.appendChild(el('div', { class: 'card-row' }, [check, body]));
   return card;
 }
+
+function today() { return R.toDateOnly(todayISO()); }
