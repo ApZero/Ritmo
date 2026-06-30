@@ -253,6 +253,9 @@ textarea { resize: vertical; min-height: 60px; }
 .stat-box { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
 .stat-box .num { font-family: var(--font-mono); font-size: 22px; font-weight: 700; }
 .stat-box .label { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.stat-box-row { display: flex; align-items: baseline; gap: 8px; padding: 11px 14px; }
+.stat-box-row .num { font-size: 19px; }
+.stat-box-row .label { margin-top: 0; }
 
 /* ---------- calendar ---------- */
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; padding: 0 14px; }
