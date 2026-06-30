@@ -1,5 +1,5 @@
 // ritmo/js/views/dashboard.js
-import { el, toast, todayISO, formatDateEs } from '../ui.js';
+import { el, toast, todayISO, formatDateEs, escapeHtml } from '../ui.js';
 import * as Store from '../store.js';
 import * as R from '../recurrence.js';
 import * as Push from '../push.js';
@@ -13,15 +13,14 @@ function toItem(entry) {
     const { project, step } = entry;
     return {
       kind: 'step', id: step.id, title: step.title, due: step.dueDate, estimatedMinutes: step.estimatedMinutes || 0,
-      pillLabel: `📁 ${project.title}`, pillColor: 'var(--teal)',
+      pillLabel: `📁 ${project.title}`, comment: null,
       onComplete: () => { Store.toggleStepCompleted(project.steps, step.id, true); Store.save(); },
     };
   }
   const t = entry;
-  const cat = t.categoryId ? Store.getCategory(t.categoryId) : null;
   return {
     kind: 'task', id: t.id, title: t.title, due: t.type === 'once' ? t.dueDate : t.currentDueDate, estimatedMinutes: t.estimatedMinutes || 0,
-    pillLabel: cat ? `${cat.icon || ''} ${cat.name}` : null, pillColor: cat?.color,
+    pillLabel: null, comment: t.type !== 'once' ? t.pendingComment : null,
     onComplete: () => {
       if (t.type === 'once') { Store.completeTask(t.id); Push.syncTaskReminder(t.id); }
       else { const updated = Store.completeTask(t.id, { computeNextDueDate: R.computeNextDueDate }); Push.syncTaskReminder(updated.id); }
@@ -93,7 +92,7 @@ export async function render(container) {
 }
 
 function statBox(num, label, color) {
-  return el('div', { class: 'stat-box' }, [
+  return el('div', { class: 'stat-box stat-box-row' }, [
     el('div', { class: 'num', style: `color:${color}` }, String(num)),
     el('div', { class: 'label' }, label),
   ]);
@@ -116,8 +115,7 @@ function buildForecastStrip(days) {
     strip.appendChild(el('div', { style: 'flex:1;background:rgba(255,255,255,.14);border-radius:10px;padding:7px 4px;text-align:center;' }, [
       el('div', { style: 'font-size:10.5px;opacity:.8;text-transform:capitalize;' }, dayName.replace('.', '')),
       el('div', { style: 'font-size:15px;margin:3px 0;' }, Weather.weatherEmoji(d.code)),
-      el('div', { class: 'mono', style: 'font-size:10.5px;' }, `${Math.round(d.tempMax)}°`),
-      el('div', { class: 'mono', style: 'font-size:9.5px;opacity:.7;' }, `${Math.round(d.tempMin)}°`),
+      el('div', { class: 'mono', style: 'font-size:10px;white-space:nowrap;' }, `${Math.round(d.tempMin)}°–${Math.round(d.tempMax)}°`),
     ]));
   }
   return strip;
@@ -140,10 +138,13 @@ function renderRow(it, status) {
     el('div', { class: 'card-title', style: 'min-width:0;' }, it.title),
     el('span', { class: `countdown ${status}`, style: 'flex:0 0 auto;white-space:nowrap;' }, R.humanizeCountdown(R.toDateOnly(it.due), today())),
   ]);
-  const body = el('div', { class: 'card-body' }, [
-    titleRow,
-    el('div', { class: 'card-meta' }, it.pillLabel ? [el('span', { class: 'cat-pill', style: `background:${it.pillColor || 'var(--sand)'}` }, it.pillLabel)] : []),
-  ]);
+  const body = el('div', { class: 'card-body' }, [titleRow]);
+  if (it.pillLabel) {
+    body.appendChild(el('div', { class: 'card-meta' }, el('span', { class: 'cat-pill', style: 'background:var(--teal)' }, it.pillLabel)));
+  }
+  if (it.comment) {
+    body.appendChild(el('div', { class: 'card-comment' }, `💬 ${escapeHtml(it.comment)}`));
+  }
   card.appendChild(el('div', { class: 'card-row' }, [check, body]));
   return card;
 }
