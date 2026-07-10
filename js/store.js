@@ -171,6 +171,16 @@ export function toggleStepCompleted(rootSteps, stepId, completed) {
   }
 }
 
+/** Todas las tareas (y pasos de proyecto) pendientes en una fecha concreta. */
+export function getItemsForDate(dateStr) {
+  const tasks = listTasks().filter(t => !t.archived).filter(t => {
+    if (t.type === 'once' && t.completed) return false;
+    const due = t.type === 'once' ? t.dueDate : t.currentDueDate;
+    return due === dateStr;
+  });
+  const steps = listAllStepsWithDates().filter(e => e.step.dueDate === dateStr);
+  return { tasks, steps };
+}
 /** Todos los pasos (de cualquier proyecto) que tienen una fecha asignada, con
  * referencia a su proyecto. Usado para que el dashboard y el calendario
  * muestren los pasos de proyecto junto con las tareas. */

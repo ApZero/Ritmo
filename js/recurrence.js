@@ -242,7 +242,7 @@ export function humanizeCountdown(dueDate, today) {
   if (diff === 0) return 'Hoy';
   const past = diff < 0;
   const [amount, unit] = pickAmountUnit(Math.abs(diff));
-  return past ? `Vencido hace ${amount} ${unit}` : `En ${amount} ${unit}`;
+  return past ? `Hace ${amount} ${unit}` : `En ${amount} ${unit}`;
 }
 
 /** Texto de "hace cuánto" para la última vez (siempre en el pasado), ej: "Hace 4 días", "Hoy". */
