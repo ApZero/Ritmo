@@ -1,10 +1,12 @@
 // ritmo/js/views/tasks.js
-import { el, openSheet, closeSheet, toast, escapeHtml, formatMinutes, todayISO, formatDateEs, buildDateQuickPicks } from '../ui.js';
+import { el, openSheet, closeSheet, toast, escapeHtml, todayISO, formatDateEs, buildDateQuickPicks } from '../ui.js';
 import * as Store from '../store.js';
 import * as R from '../recurrence.js';
 import * as Push from '../push.js';
 import { renderStepTree } from './stepTree.js';
 import { taskStats } from './stats.js';
+
+export { openTaskForm as openTaskFormExternal };
 
 // ---------- estado de filtros (vive mientras la app esté abierta) ----------
 const state = {
@@ -146,7 +148,6 @@ function buildSections() {
 // ---------- tarjeta ----------
 
 function renderCard(t, sectionId) {
-  const cat = t.categoryId ? Store.getCategory(t.categoryId) : null;
   const isDone = t.type === 'once' && t.completed;
   const rail = sectionId === 'completadas' ? 'a_tiempo' : sectionId;
   const due = dueOf(t);
@@ -167,11 +168,9 @@ function renderCard(t, sectionId) {
   }
   body.appendChild(titleRow);
 
-  if (cat || (t.tags || []).length || t.estimatedMinutes) {
+  if ((t.tags || []).length) {
     const meta = el('div', { class: 'card-meta' });
-    if (cat) meta.appendChild(el('span', { class: 'cat-pill', style: `background:${cat.color}` }, `${cat.icon || ''} ${cat.name}`));
-    for (const tag of (t.tags || [])) meta.appendChild(el('span', { class: 'tag-pill' }, `#${tag}`));
-    if (t.estimatedMinutes) meta.appendChild(el('span', { class: 'tag-pill' }, `⏱ ${formatMinutes(t.estimatedMinutes)}`));
+    for (const tag of t.tags) meta.appendChild(el('span', { class: 'tag-pill' }, `#${tag}`));
     body.appendChild(meta);
   }
 
@@ -400,11 +399,11 @@ function defaultRule() {
   return { mode: 'every', unit: 'week', interval: 1, weekdays: [1], anchorDate: todayISO() };
 }
 
-function openTaskForm(existing) {
+function openTaskForm(existing, { prefill = {} } = {}) {
   const isEdit = !!existing;
   const t = existing ? JSON.parse(JSON.stringify(existing)) : {
     title: '', notes: '', type: 'once', categoryId: null, tags: [], estimatedMinutes: 0,
-    priority: 'normal', subtasks: [], dueDate: null, rule: defaultRule(), currentDueDate: null,
+    priority: 'normal', subtasks: [], dueDate: prefill.dueDate || null, rule: defaultRule(), currentDueDate: null,
     pendingComment: '', reminder: { enabled: false, time: Store.getSettings().reminderDefaultTime, offsetDays: 0 },
   };
   if (!t.reminder) t.reminder = { enabled: false, time: Store.getSettings().reminderDefaultTime, offsetDays: 0 };

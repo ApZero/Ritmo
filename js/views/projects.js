@@ -1,11 +1,44 @@
 // ritmo/js/views/projects.js
-import { el, openSheet, closeSheet, toast } from '../ui.js';
+import { el, openSheet, closeSheet, toast, formatDateEs } from '../ui.js';
 import * as Store from '../store.js';
+import * as R from '../recurrence.js';
+import * as Push from '../push.js';
 import { renderStepTree } from './stepTree.js';
+import { openTaskFormExternal } from './tasks.js';
 
-export const fab = { label: 'Nuevo proyecto', onClick: () => openProjectForm(null) };
+// ─── sub-tab state ─────────────────────────────────────────────────────────
+let activeTab = 'proyectos'; // 'proyectos' | 'diaslibres'
+
+export const fab = {
+  label: 'Nuevo',
+  onClick: () => {
+    if (activeTab === 'proyectos') openProjectForm(null);
+    else openNewTaskForDay(null); // opens a quick-add for today when no date is selected
+  },
+};
 
 export function render(container) {
+  // Sub-tab bar
+  const tabBar = el('div', { class: 'segmented', style: 'margin:0 18px 14px;' });
+  for (const [id, label] of [['proyectos', '🗂️ Proyectos'], ['diaslibres', '🌿 Días libres']]) {
+    const b = el('button', { class: id === activeTab ? 'active' : '' }, label);
+    b.addEventListener('click', () => {
+      activeTab = id;
+      const v = document.getElementById('view');
+      v.innerHTML = '';
+      render(v);
+    });
+    tabBar.appendChild(b);
+  }
+  container.appendChild(tabBar);
+
+  if (activeTab === 'proyectos') renderProyectos(container);
+  else renderDiasLibres(container);
+}
+
+// ─── Proyectos ──────────────────────────────────────────────────────────────
+
+function renderProyectos(container) {
   const projects = Store.listProjects().filter(p => !p.archived);
   if (!projects.length) {
     container.appendChild(el('div', { class: 'empty-state' }, [
@@ -14,7 +47,7 @@ export function render(container) {
     ]));
     return;
   }
-  const list = el('div', { class: 'list', style: 'padding-top:8px;' });
+  const list = el('div', { class: 'list' });
   for (const p of projects.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))) {
     list.appendChild(renderProjectCard(p));
   }
@@ -34,7 +67,6 @@ function countSteps(steps) {
 }
 
 function renderProjectCard(p) {
-  const cat = p.categoryId ? Store.getCategory(p.categoryId) : null;
   const pct = Store.computeProgress(p.steps);
   const { total, done } = countSteps(p.steps);
   const card = el('div', { class: 'card', style: 'cursor:pointer;' });
@@ -43,7 +75,6 @@ function renderProjectCard(p) {
       el('div', { class: 'card-title' }, p.title),
       el('div', { class: 'mono', style: 'font-size:13px;color:var(--teal);font-weight:700;' }, `${pct}%`),
     ]),
-    cat ? el('div', { class: 'card-meta' }, el('span', { class: 'cat-pill', style: `background:${cat.color}` }, `${cat.icon || ''} ${cat.name}`)) : null,
     el('div', { class: 'progress-bar', style: 'margin-top:10px;' }, el('div', { style: `width:${pct}%` })),
     el('div', { style: 'font-size:12px;color:var(--ink-soft);margin-top:6px;' }, `${done}/${total} pasos completados`),
   ]));
@@ -67,14 +98,12 @@ function openProjectDetail(p) {
     pctLabel,
   ]));
   wrap.appendChild(progressBar);
-
   wrap.appendChild(el('div', { class: 'field', style: 'margin-top:18px;' }, [
     el('label', {}, 'Pasos'),
-    el('div', { style: 'font-size:11.5px;color:var(--ink-soft);margin:-2px 0 8px;' }, 'Si le ponés fecha a un paso, aparece junto a tus tareas en Hoy / Vencido.'),
+    el('div', { style: 'font-size:11.5px;color:var(--ink-soft);margin:-2px 0 8px;' }, 'Podés ponerle fecha a cada paso para que aparezca en Hoy / Vencido.'),
     renderStepTree(p.steps, { onMutate: () => { Store.save(); updateProgress(); }, showDates: true }),
   ]));
-
-  const editBtn = el('button', { class: 'btn btn-secondary' }, 'Editar título / descripción / categoría');
+  const editBtn = el('button', { class: 'btn btn-secondary' }, 'Editar nombre / descripción');
   editBtn.addEventListener('click', () => openProjectForm(p));
   const delBtn = el('button', { class: 'btn btn-danger' }, 'Eliminar proyecto');
   delBtn.addEventListener('click', () => {
@@ -85,7 +114,6 @@ function openProjectDetail(p) {
   });
   wrap.appendChild(el('div', { class: 'btn-row' }, [editBtn]));
   wrap.appendChild(el('div', { class: 'btn-row' }, [delBtn]));
-
   openSheet(wrap, { title: p.title });
 }
 
@@ -93,29 +121,139 @@ function openProjectForm(existing) {
   const isEdit = !!existing;
   const titleInput = el('input', { type: 'text', placeholder: 'Nombre del proyecto', value: existing?.title || '' });
   const descArea = el('textarea', { placeholder: 'Detalles, objetivo, contexto…' }, existing?.description || '');
-  const catSelect = el('select', {});
-  catSelect.appendChild(el('option', { value: '' }, 'Sin categoría'));
-  for (const c of Store.listCategories()) {
-    const opt = el('option', { value: c.id }, `${c.icon || ''} ${c.name}`);
-    if (existing?.categoryId === c.id) opt.selected = true;
-    catSelect.appendChild(opt);
-  }
-
   const saveBtn = el('button', { class: 'btn btn-primary' }, isEdit ? 'Guardar cambios' : 'Crear proyecto');
   saveBtn.addEventListener('click', () => {
     const title = titleInput.value.trim();
     if (!title) { toast('Poné un nombre para el proyecto.'); return; }
-    const patch = { title, description: descArea.value, categoryId: catSelect.value || null };
+    const patch = { title, description: descArea.value };
     if (isEdit) Store.updateProject(existing.id, patch);
     else Store.createProject({ ...patch, steps: [] });
     closeSheet();
     toast(isEdit ? 'Proyecto actualizado' : 'Proyecto creado');
   });
-
   openSheet(el('div', {}, [
     el('div', { class: 'field' }, [el('label', {}, 'Nombre'), titleInput]),
     el('div', { class: 'field' }, [el('label', {}, 'Descripción'), descArea]),
-    el('div', { class: 'field' }, [el('label', {}, 'Categoría'), catSelect]),
     saveBtn,
   ]), { title: isEdit ? 'Editar proyecto' : 'Nuevo proyecto' });
 }
+
+// ─── Días libres ─────────────────────────────────────────────────────────────
+
+function renderDiasLibres(container) {
+  const upcoming = Store.getUpcomingSpecialDays({ days: 60, limit: 30 });
+  if (!upcoming.length) {
+    container.appendChild(el('div', { class: 'empty-state' }, [
+      el('div', { class: 'glyph' }, '🌿'),
+      el('div', {}, 'No hay días especiales próximos en los próximos 60 días.'),
+    ]));
+    return;
+  }
+
+  const today = R.toDateOnly(new Date().toISOString().slice(0, 10));
+  const list = el('div', { class: 'list' });
+
+  for (const d of upcoming) {
+    const { tasks, steps } = Store.getItemsForDate(d.date);
+    const total = tasks.length + steps.length;
+    const emoji = d.type === 'feriado' ? '📌' : d.type === 'libre' ? '🌿' : '🌤️';
+    const daysAway = Math.round((R.toDateOnly(d.date).getTime() - today.getTime()) / 86400000);
+    const awayLabel = daysAway === 0 ? 'Hoy' : daysAway === 1 ? 'Mañana' : `En ${daysAway} días`;
+
+    const card = el('div', { class: 'card', style: 'cursor:pointer;' });
+    card.appendChild(el('div', { class: 'card-body' }, [
+      el('div', { class: 'card-row', style: 'justify-content:space-between;align-items:baseline;' }, [
+        el('div', {}, [
+          el('div', { class: 'card-title', style: 'font-size:15px;' }, `${emoji} ${formatDateEs(d.date)}`),
+          el('div', { style: 'font-size:12px;color:var(--ink-soft);margin-top:2px;' }, d.label),
+        ]),
+        el('div', { class: 'mono', style: 'font-size:12px;color:var(--teal);' }, awayLabel),
+      ]),
+      total
+        ? el('div', { style: 'font-size:12px;color:var(--ink-soft);margin-top:6px;' }, `${total} ${total === 1 ? 'tarea' : 'tareas'} asignadas`)
+        : el('div', { style: 'font-size:12px;color:var(--line);margin-top:6px;' }, 'Sin tareas asignadas — tocá para agregar'),
+    ]));
+    card.addEventListener('click', () => openDayPlanner(d));
+    list.appendChild(card);
+  }
+  container.appendChild(list);
+}
+
+// ─── Planificador de día ──────────────────────────────────────────────────────
+
+function openDayPlanner(dayEntry) {
+  const wrap = el('div');
+  let dirty = false;
+
+  function rebuild() {
+    wrap.innerHTML = '';
+    const { tasks, steps } = Store.getItemsForDate(dayEntry.date);
+
+    // Steps from projects
+    if (steps.length) {
+      wrap.appendChild(el('div', { class: 'section-label', style: 'padding-left:0;margin-bottom:8px;' }, 'Pasos de proyectos'));
+      for (const { project, step } of steps) {
+        const row = el('div', { class: 'card', style: 'margin-bottom:8px;' });
+        const check = el('div', { class: 'check' + (step.completed ? ' done' : '') });
+        check.innerHTML = step.completed ? '✓' : '';
+        check.style.cssText = 'font-size:11px;color:#fff;flex:0 0 auto;';
+        check.addEventListener('click', () => {
+          Store.toggleStepCompleted(project.steps, step.id, !step.completed);
+          Store.save();
+          rebuild();
+        });
+        row.appendChild(el('div', { class: 'card-row' }, [
+          check,
+          el('div', { class: 'card-body' }, [
+            el('div', { class: 'card-title' + (step.completed ? ' done' : ''), style: 'font-size:14.5px;' }, step.title),
+            el('div', { style: 'font-size:11.5px;color:var(--ink-soft);' }, `📁 ${project.title}`),
+          ]),
+        ]));
+        wrap.appendChild(row);
+      }
+    }
+
+    // Tasks
+    if (tasks.length) {
+      wrap.appendChild(el('div', { class: 'section-label', style: 'padding-left:0;margin-bottom:8px;' }, 'Tareas'));
+      for (const t of tasks) {
+        const isDone = t.type === 'once' && t.completed;
+        const row = el('div', { class: 'card', style: 'margin-bottom:8px;' });
+        const check = el('div', { class: 'check' + (isDone ? ' done' : '') });
+        check.innerHTML = isDone ? '✓' : '';
+        check.style.cssText = 'font-size:11px;color:#fff;flex:0 0 auto;';
+        check.addEventListener('click', () => {
+          if (t.type === 'once') { Store.completeTask(t.id); Push.syncTaskReminder(t.id); }
+          else { const u = Store.completeTask(t.id, { computeNextDueDate: R.computeNextDueDate }); Push.syncTaskReminder(u.id); }
+          rebuild();
+        });
+        row.appendChild(el('div', { class: 'card-row' }, [
+          check,
+          el('div', { class: 'card-body' }, [
+            el('div', { class: 'card-title' + (isDone ? ' done' : ''), style: 'font-size:14.5px;' }, t.title),
+            t.pendingComment ? el('div', { class: 'card-comment', style: 'margin-top:5px;' }, `💬 ${t.pendingComment}`) : null,
+          ]),
+        ]));
+        wrap.appendChild(row);
+      }
+    }
+
+    if (!tasks.length && !steps.length) {
+      wrap.appendChild(el('div', { style: 'color:var(--ink-soft);font-size:13.5px;padding:8px 0 14px;' }, 'No hay tareas asignadas para este día todavía.'));
+    }
+
+    // Quick-add task button
+    const addBtn = el('button', { class: 'btn btn-secondary', style: 'margin-top:10px;' }, '+ Agregar tarea para este día');
+    addBtn.addEventListener('click', () => openNewTaskForDay(dayEntry.date));
+    wrap.appendChild(addBtn);
+  }
+
+  rebuild();
+  const emoji = dayEntry.type === 'feriado' ? '📌' : dayEntry.type === 'libre' ? '🌿' : '🌤️';
+  openSheet(wrap, { title: `${emoji} ${formatDateEs(dayEntry.date)} · ${dayEntry.label}` });
+}
+
+function openNewTaskForDay(dateStr) {
+  openTaskFormExternal(null, { prefill: { dueDate: dateStr || new Date().toISOString().slice(0, 10) } });
+}
+
