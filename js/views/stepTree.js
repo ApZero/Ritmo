@@ -51,11 +51,33 @@ export function renderStepTree(steps, { onMutate, showDates = false }) {
     row.appendChild(check);
 
     const titleInput = el('input', { type: 'text', value: step.title, class: 'step-title' + (step.completed ? ' done' : '') });
+    titleInput.addEventListener('focus', () => { if (titleInput.value === 'Nuevo paso' || titleInput.value === 'Nuevo subpaso') titleInput.select(); });
     titleInput.addEventListener('change', () => { step.title = titleInput.value; onMutate(); });
     row.appendChild(titleInput);
 
     const idx = parentArray.indexOf(step);
     const btns = el('div', { class: 'step-btns' });
+
+    if (showDates) {
+      const hasDate = !!step.dueDate;
+      const calBtn = el('button', {
+        class: 'step-move', type: 'button',
+        title: hasDate ? `Fecha: ${step.dueDate}` : 'Agregar fecha',
+        style: hasDate ? 'color:var(--teal);font-size:12px;' : 'font-size:13px;',
+      }, hasDate ? `📅 ${step.dueDate.slice(5)}` : '📅');
+      calBtn.addEventListener('click', () => {
+        const dp = el('input', { type: 'date', value: step.dueDate || '', style: 'position:absolute;opacity:0;pointer-events:none;' });
+        calBtn.after(dp);
+        dp.addEventListener('change', () => { step.dueDate = dp.value || null; onMutate(); mutate(); });
+        dp.addEventListener('blur', () => dp.remove());
+        dp.focus(); dp.showPicker?.();
+      });
+      btns.appendChild(calBtn);
+      if (hasDate) {
+        btns.appendChild(el('button', { class: 'step-remove', type: 'button', title: 'Quitar fecha', onClick: () => { step.dueDate = null; mutate(); } }, '×'));
+      }
+    }
+
     if (idx > 0) {
       btns.appendChild(el('button', { class: 'step-move', title: 'Subir', onClick: () => { swap(parentArray, idx, idx - 1); mutate(); } }, '↑'));
     }
@@ -77,17 +99,6 @@ export function renderStepTree(steps, { onMutate, showDates = false }) {
     row.appendChild(btns);
 
     wrap.appendChild(row);
-
-    if (showDates) {
-      const dateRow = el('div', { class: 'step-date-row' });
-      const dateInput = el('input', { type: 'date', value: step.dueDate || '', class: 'step-date-input' });
-      dateInput.addEventListener('change', () => { step.dueDate = dateInput.value || null; onMutate(); });
-      dateRow.appendChild(dateInput);
-      if (step.dueDate) {
-        dateRow.appendChild(el('button', { class: 'step-add-child', onClick: () => { step.dueDate = null; mutate(); } }, 'Quitar fecha'));
-      }
-      wrap.appendChild(dateRow);
-    }
 
     if (step.children && step.children.length) {
       const childWrap = el('div', { class: 'step-children' }, renderLevel(step.children));

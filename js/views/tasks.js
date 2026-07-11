@@ -66,23 +66,6 @@ function buildFiltersUI() {
   });
   typeChips.appendChild(hideChip);
   wrap.appendChild(typeChips);
-
-  const cats = Store.listCategories();
-  if (cats.length) {
-    const catChips = el('div', { class: 'chiprow' });
-    for (const c of cats) {
-      const chip = el('button', { class: 'chip' + (state.categoryIds.has(c.id) ? ' active' : '') }, [
-        el('span', { class: 'swatch', style: `background:${c.color}` }), `${c.icon || ''} ${c.name}`,
-      ]);
-      chip.addEventListener('click', () => {
-        state.categoryIds.has(c.id) ? state.categoryIds.delete(c.id) : state.categoryIds.add(c.id);
-        chip.classList.toggle('active');
-        refreshSections();
-      });
-      catChips.appendChild(chip);
-    }
-    wrap.appendChild(catChips);
-  }
   return wrap;
 }
 
@@ -91,7 +74,6 @@ function buildFiltersUI() {
 function passesFilters(t) {
   if (state.type === 'every_after' && t.type === 'once') return false;
   if (state.type === 'once' && t.type !== 'once') return false;
-  if (state.categoryIds.size && !state.categoryIds.has(t.categoryId)) return false;
   if (state.search && !t.title.toLowerCase().includes(state.search.toLowerCase())) return false;
   return true;
 }
@@ -463,26 +445,8 @@ function openTaskForm(existing, { prefill = {} } = {}) {
   }
   rebuildDynamic();
 
-  // Categoría + etiquetas
-  const catSelect = el('select', {});
-  catSelect.appendChild(el('option', { value: '' }, 'Sin categoría'));
-  for (const c of Store.listCategories()) {
-    const opt = el('option', { value: c.id }, `${c.icon || ''} ${c.name}`);
-    if (c.id === t.categoryId) opt.selected = true;
-    catSelect.appendChild(opt);
-  }
-  catSelect.addEventListener('change', () => {
-    t.categoryId = catSelect.value || null;
-    const cat = Store.getCategory(t.categoryId);
-    if (cat && !t.estimatedMinutes) { estInput.value = cat.estimatedMinutes || ''; t.estimatedMinutes = cat.estimatedMinutes || 0; }
-  });
-  form.appendChild(el('div', { class: 'field' }, [el('label', {}, 'Categoría'), catSelect]));
-
   const tagsInput = el('input', { type: 'text', placeholder: 'separadas por coma', value: (t.tags || []).join(', ') });
   form.appendChild(el('div', { class: 'field' }, [el('label', {}, 'Etiquetas'), tagsInput]));
-
-  const estInput = el('input', { type: 'number', min: '0', step: '5', value: t.estimatedMinutes || '' });
-  form.appendChild(el('div', { class: 'field' }, [el('label', {}, 'Tiempo estimado (minutos)'), estInput]));
 
   const notesArea = el('textarea', { placeholder: 'Notas…' }, t.notes || '');
   form.appendChild(el('div', { class: 'field' }, [el('label', {}, 'Notas'), notesArea]));
@@ -499,7 +463,6 @@ function openTaskForm(existing, { prefill = {} } = {}) {
     t.title = titleInput.value.trim();
     if (!t.title) { toast('Poné un título para la tarea.'); return; }
     t.tags = tagsInput.value.split(',').map(s => s.trim()).filter(Boolean);
-    t.estimatedMinutes = Number(estInput.value) || 0;
     t.notes = notesArea.value;
     persistTask(t, isEdit);
   });
