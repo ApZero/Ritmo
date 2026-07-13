@@ -272,6 +272,21 @@ textarea { resize: vertical; min-height: 60px; }
 .cal-nav { display: flex; align-items: center; justify-content: space-between; padding: 0 18px 10px; }
 .cal-nav button { border: none; background: var(--surface-2); border-radius: 50%; width: 32px; height: 32px; cursor: pointer; font-size: 15px; }
 
+.header-pills {
+  display: flex; align-items: center; gap: 6px; padding: 4px 18px 10px; flex-wrap: wrap;
+}
+.header-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft);
+  cursor: default;
+}
+.header-pill.count-vencido { background: var(--terracotta); border-color: var(--terracotta); color: #fff; }
+.header-pill.count-hoy { background: var(--ochre); border-color: var(--ochre); color: #fff; }
+.header-pill.special-day { background: var(--teal-soft); border-color: var(--teal); color: var(--teal); }
+.trip-pill { cursor: pointer; background: var(--surface-2); }
+.trip-pill.trip-active { background: var(--terracotta); border-color: var(--terracotta); color: #fff; }
+
 .toast {
   position: fixed; bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 14px); left: 50%; transform: translateX(-50%);
   background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 13px;
