@@ -58,6 +58,7 @@ function defaultData() {
     tasks: [],
     projects: [],
     specialDays: [], // feriados / días libres puntuales — los fines de semana se calculan, no se guardan
+    trip: null, // { id, items:[{id,taskId?,title,done}], startedAt, endedAt|null }
   };
 }
 
@@ -86,6 +87,7 @@ function migrate(data) {
   data.tasks = data.tasks || [];
   data.projects = data.projects || [];
   data.specialDays = data.specialDays || [];
+  if (!('trip' in data)) data.trip = null;
   return data;
 }
 
@@ -456,3 +458,47 @@ export function importBackup(json, { replace = true } = {}) {
 }
 
 export { uid };
+
+// ---------- viaje / trip planner ----------
+
+export function getTrip() { return load().trip; }
+
+export function startTrip(items) {
+  // items: [{ taskId?, title, done:false }]
+  const data = load();
+  data.trip = { id: uid(), items: items.map(it => ({ id: uid(), ...it, done: false })), startedAt: nowISO(), endedAt: null };
+  save();
+  return data.trip;
+}
+
+export function updateTripItems(items) {
+  const data = load();
+  if (!data.trip) return null;
+  data.trip.items = items;
+  save();
+  return data.trip;
+}
+
+export function setTripItemDone(itemId, done) {
+  const data = load();
+  if (!data.trip) return null;
+  const item = data.trip.items.find(i => i.id === itemId);
+  if (item) item.done = done;
+  save();
+  return data.trip;
+}
+
+export function endTrip() {
+  const data = load();
+  if (!data.trip) return;
+  data.trip.endedAt = nowISO();
+  // Pending items already exist as normal tasks — no extra action needed.
+  data.trip = null;
+  save();
+}
+
+export function clearTrip() {
+  const data = load();
+  data.trip = null;
+  save();
+}
