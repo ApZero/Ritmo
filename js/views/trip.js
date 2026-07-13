@@ -154,9 +154,11 @@ export function openActiveTripSheet(onRefreshHoy) {
     if (!t) return;
     const done = t.items.filter(i => i.done).length;
     const total = t.items.length;
+    const progressLabel = el('div', { style: 'font-size:12.5px;color:var(--ink-soft);' }, `${done}/${total} completadas`);
+    const progressFill = el('div', { style: `width:${Math.round(done/total*100)}%` });
     wrap.appendChild(el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;' }, [
-      el('div', { style: 'font-size:12.5px;color:var(--ink-soft);' }, `${done}/${total} completadas`),
-      el('div', { class: 'progress-bar', style: 'flex:1;margin:0 12px;' }, el('div', { style: `width:${Math.round(done/total*100)}%` })),
+      progressLabel,
+      el('div', { class: 'progress-bar', style: 'flex:1;margin:0 12px;' }, progressFill),
     ]));
 
     const list = el('div', { style: 'display:flex;flex-direction:column;gap:6px;' });
@@ -207,7 +209,78 @@ export function openActiveTripSheet(onRefreshHoy) {
     });
     wrap.appendChild(list);
 
-    const endBtn = el('button', { class: 'btn btn-secondary', style: 'margin-top:14px;' }, 'Terminar salida');
+    // ---- Agregar más tareas ----
+    const addSection = el('div', { style: 'margin-top:14px;' });
+    let addExpanded = false;
+
+    const toggleBtn = el('button', { class: 'btn btn-secondary' }, '+ Agregar tareas');
+    toggleBtn.addEventListener('click', () => {
+      addExpanded = !addExpanded;
+      addPanel.style.display = addExpanded ? '' : 'none';
+      toggleBtn.textContent = addExpanded ? '− Cerrar' : '+ Agregar tareas';
+    });
+
+    const addPanel = el('div', { style: 'display:none;margin-top:10px;' });
+
+    // Quick-add: type title and add directly
+    const quickRow = el('div', { style: 'display:flex;gap:8px;margin-bottom:10px;' });
+    const quickInput = el('input', { type: 'text', placeholder: 'Nueva tarea rápida…', style: 'flex:1;' });
+    const quickBtn = el('button', { class: 'btn btn-primary', style: 'width:auto;padding:10px 14px;' }, '+');
+    quickBtn.addEventListener('click', () => {
+      const title = quickInput.value.trim();
+      if (!title) return;
+      const task = Store.createTask({ title, type: 'once', dueDate: todayISO() });
+      const current = Store.getTrip();
+      Store.updateTripItems([...current.items, { id: Store.uid(), taskId: task.id, title, done: false }]);
+      quickInput.value = '';
+      toast(`"${title}" agregada`);
+      rebuild();
+    });
+    quickRow.appendChild(quickInput);
+    quickRow.appendChild(quickBtn);
+    addPanel.appendChild(quickRow);
+
+    // Pick from existing tasks not already in this trip
+    const currentTrip = Store.getTrip();
+    const alreadyIn = new Set((currentTrip?.items || []).map(i => i.taskId).filter(Boolean));
+    const available = Store.listTasks()
+      .filter(t => !t.archived && !(t.type === 'once' && t.completed) && !alreadyIn.has(t.id));
+
+    if (available.length) {
+      addPanel.appendChild(el('div', { style: 'font-size:11.5px;color:var(--ink-soft);margin-bottom:6px;' }, 'O elegí de tus tareas:'));
+      const pickList = el('div', { style: 'display:flex;flex-direction:column;gap:5px;max-height:200px;overflow-y:auto;' });
+      for (const t of available) {
+        const row = el('div', { style: 'display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface);border:1px solid var(--line);border-radius:9px;cursor:pointer;' });
+        row.appendChild(el('div', { style: 'flex:1;font-size:13.5px;' }, t.title));
+        const addTaskBtn = el('button', { class: 'btn btn-secondary', style: 'width:auto;padding:5px 10px;font-size:12px;' }, 'Agregar');
+        addTaskBtn.addEventListener('click', () => {
+          const cur = Store.getTrip();
+          Store.updateTripItems([...cur.items, { id: Store.uid(), taskId: t.id, title: t.title, done: false }]);
+          row.style.opacity = '0.4';
+          row.style.pointerEvents = 'none';
+          addTaskBtn.textContent = '✓';
+          toast(`"${t.title}" agregada`);
+          onRefreshHoy();
+          // Partial rebuild — just update count and progress without closing
+          const newTrip = Store.getTrip();
+          const d = newTrip.items.filter(i => i.done).length;
+          const tot = newTrip.items.length;
+          progressLabel.textContent = `${d}/${tot} completadas`;
+          progressFill.style.width = `${Math.round(d / tot * 100)}%`;
+        });
+        row.appendChild(addTaskBtn);
+        pickList.appendChild(row);
+      }
+      addPanel.appendChild(pickList);
+    } else {
+      addPanel.appendChild(el('div', { style: 'font-size:12px;color:var(--ink-soft);' }, 'No quedan tareas para agregar.'));
+    }
+
+    addSection.appendChild(toggleBtn);
+    addSection.appendChild(addPanel);
+    wrap.appendChild(addSection);
+
+    const endBtn = el('button', { class: 'btn btn-secondary', style: 'margin-top:10px;' }, 'Terminar salida');
     endBtn.addEventListener('click', () => {
       Store.endTrip();
       closeSheet();
