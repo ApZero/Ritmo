@@ -4,6 +4,7 @@ import * as Store from '../store.js';
 import * as R from '../recurrence.js';
 import * as Push from '../push.js';
 import * as Weather from '../weather.js';
+import { renderTripPill, openActiveTripSheet } from './trip.js';
 
 export const fab = null;
 
@@ -32,23 +33,6 @@ export async function render(container) {
   const today = R.toDateOnly(todayISO());
   const settings = Store.getSettings();
 
-  const special = Store.getSpecialDay(todayISO());
-  const weekend = Store.isWeekend(todayISO());
-  if (special || weekend) {
-    container.appendChild(el('div', { style: 'padding:0 18px 10px;' }, el('span', { class: 'tag-pill', style: 'background:var(--teal-soft);color:var(--teal);font-weight:600;' },
-      special ? `${special.type === 'feriado' ? '📌' : '🌿'} Hoy: ${special.label}` : '🌤️ Fin de semana')));
-  }
-
-  const weatherSlot = el('div');
-  container.appendChild(weatherSlot);
-  if (settings.weatherEnabled) {
-    weatherSlot.appendChild(el('div', { class: 'dash-card' }, [el('h3', {}, '🌤️ Cargando el clima…')]));
-    Weather.getTodaySuggestion().then(s => {
-      weatherSlot.innerHTML = '';
-      weatherSlot.appendChild(renderWeatherCard(s, settings));
-    });
-  }
-
   const tasks = Store.listTasks().filter(t => !t.archived).filter(t => !(t.type === 'once' && t.completed));
   const steps = Store.listAllStepsWithDates();
   const allItems = [...tasks, ...steps].map(toItem).filter(it => it.due);
@@ -61,14 +45,27 @@ export async function render(container) {
     else if (status === 'proximo') soon.push(it);
   }
 
-  container.appendChild(el('div', { class: 'stat-grid', style: 'margin-bottom:6px;' }, [
-    statBox(overdue.length, 'Vencidas', 'var(--terracotta)'),
-    statBox(dueToday.length, 'Para hoy', 'var(--ochre)'),
-  ]));
-  const totalMinutes = [...overdue, ...dueToday].reduce((s, it) => s + (it.estimatedMinutes || 0), 0);
-  if (totalMinutes) {
-    container.appendChild(el('div', { style: 'padding:6px 18px 0;color:var(--ink-soft);font-size:12.5px;' },
-      `≈ ${Math.round(totalMinutes / 60 * 10) / 10} h de trabajo entre lo vencido y lo de hoy.`));
+  // Pill row: counts + special day + trip button
+  const pillRow = el('div', { class: 'header-pills' });
+  if (overdue.length) pillRow.appendChild(el('span', { class: 'header-pill count-vencido' }, `${overdue.length} vencida${overdue.length !== 1 ? 's' : ''}`));
+  if (dueToday.length) pillRow.appendChild(el('span', { class: 'header-pill count-hoy' }, `${dueToday.length} para hoy`));
+  const special = Store.getSpecialDay(todayISO());
+  const weekend = Store.isWeekend(todayISO());
+  if (special) pillRow.appendChild(el('span', { class: 'header-pill special-day' }, `${special.type === 'feriado' ? '📌' : '🌿'} ${special.label}`));
+  else if (weekend) pillRow.appendChild(el('span', { class: 'header-pill special-day' }, '🌤️ Fin de semana'));
+  const refresh = () => { container.innerHTML = ''; render(container); };
+  renderTripPill(pillRow, refresh);
+  container.appendChild(pillRow);
+
+  // Weather card (async)
+  if (settings.weatherEnabled) {
+    const weatherSlot = el('div');
+    container.appendChild(weatherSlot);
+    weatherSlot.appendChild(el('div', { class: 'dash-card' }, el('div', { style: 'font-size:12px;text-align:center;opacity:.7;' }, '🌤️ Cargando clima…')));
+    Weather.getTodaySuggestion().then(s => {
+      weatherSlot.innerHTML = '';
+      weatherSlot.appendChild(renderWeatherCard(s));
+    });
   }
 
   if (overdue.length) {
@@ -91,14 +88,7 @@ export async function render(container) {
   }
 }
 
-function statBox(num, label, color) {
-  return el('div', { class: 'stat-box stat-box-row' }, [
-    el('div', { class: 'num', style: `color:${color}` }, String(num)),
-    el('div', { class: 'label' }, label),
-  ]);
-}
-
-function renderWeatherCard(s, settings) {
+function renderWeatherCard(s) {
   if (!s) {
     return el('div', { class: 'dash-card', style: 'background:var(--sand);' }, [
       el('div', { style: 'font-size:12px;text-align:center;' }, 'Clima no disponible.'),
