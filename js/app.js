@@ -1,6 +1,7 @@
 // ritmo/js/app.js
 import { icon, todayISO } from './ui.js';
 import { registerServiceWorker } from './push.js';
+import { runDailyAutoBackupIfNeeded } from './store.js';
 
 import * as Hoy from './views/dashboard.js';
 import * as Tareas from './views/tasks.js';
@@ -106,3 +107,12 @@ window.addEventListener('ritmo:change', () => {
 
 registerServiceWorker().catch(() => {});
 navigateTo('hoy');
+
+// Respaldo automático diario — se dispara una vez por día al abrir la app.
+setTimeout(() => {
+  const triggered = runDailyAutoBackupIfNeeded();
+  if (triggered) {
+    // toast importado dinámicamente para no ensuciar el import de app.js
+    import('./ui.js').then(({ toast }) => toast('📥 Respaldo diario guardado'));
+  }
+}, 1500);

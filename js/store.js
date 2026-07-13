@@ -433,6 +433,37 @@ export function exportBackup() {
   };
 }
 
+const AUTO_BACKUP_KEY = 'ritmo:last-auto-backup';
+
+/**
+ * Llama a esto una vez al arrancar la app. Si ya se hizo un respaldo automático
+ * hoy, no hace nada. Si no, descarga el JSON y registra la fecha.
+ * Devuelve true si disparó la descarga, false si ya estaba al día.
+ */
+export function runDailyAutoBackupIfNeeded() {
+  const today = nowISO().slice(0, 10);
+  const last = localStorage.getItem(AUTO_BACKUP_KEY);
+  if (last === today) return false;
+
+  try {
+    const backup = exportBackup();
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ritmo-auto-${today}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    localStorage.setItem(AUTO_BACKUP_KEY, today);
+    return true;
+  } catch (e) {
+    console.warn('Auto-respaldo falló:', e);
+    return false;
+  }
+}
+
 export function importBackup(json, { replace = true } = {}) {
   if (!json || json.app !== 'ritmo' || !json.payload) {
     throw new Error('Archivo de respaldo no reconocido.');
