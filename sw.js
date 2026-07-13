@@ -2,7 +2,7 @@
 // Service worker: cachea el "shell" de la app para que funcione offline, y
 // recibe las notificaciones push enviadas desde la función de Supabase.
 
-const CACHE_NAME = 'ritmo-cache-v7';
+const CACHE_NAME = 'ritmo-cache-v8';
 const SHELL_FILES = [
   './',
   './index.html',
@@ -23,6 +23,7 @@ const SHELL_FILES = [
   './js/views/categories.js',
   './js/views/settings.js',
   './js/views/stepTree.js',
+  './js/views/trip.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
 ];
