@@ -8,6 +8,7 @@ import * as Store from '../store.js';
 import * as R from '../recurrence.js';
 import { todayISO, formatDateEs } from '../ui.js';
 import { openTaskFormExternal } from './tasks.js';
+import { buildTaskPicker } from './taskPicker.js';
 
 function swap(arr, i, j) { [arr[i], arr[j]] = [arr[j], arr[i]]; }
 
@@ -39,105 +40,70 @@ export function openTripSheet(onRefreshHoy) {
 // ---------- nuevo viaje: elegir y ordenar tareas ----------
 
 function openNewTripSheet(onRefreshHoy) {
-  const today = R.toDateOnly(todayISO());
-  const settings = Store.getSettings();
-
-  // Recolectar tareas disponibles (vencidas + hoy + próximas + sin fecha)
-  const allTasks = Store.listTasks().filter(t => !t.archived && !(t.type === 'once' && t.completed));
-  const allSteps = Store.listAllStepsWithDates({ includeCompleted: false });
-
-  const candidates = [];
-  for (const t of allTasks) {
-    const due = t.type === 'once' ? t.dueDate : t.currentDueDate;
-    const status = due ? R.classifyStatus(R.toDateOnly(due), today, settings.proximoWindowDays) : 'sin_fecha';
-    candidates.push({ id: 'task:' + t.id, taskId: t.id, title: t.title, status, due });
-  }
-  for (const { project, step } of allSteps) {
-    const status = R.classifyStatus(R.toDateOnly(step.dueDate), today, settings.proximoWindowDays);
-    candidates.push({ id: 'step:' + step.id, stepId: step.id, projectTitle: project.title, title: `${step.title} (${project.title})`, status, due: step.dueDate });
-  }
-  candidates.sort((a, b) => {
-    const order = { vencido: 0, hoy: 1, proximo: 2, a_tiempo: 3, sin_fecha: 4 };
-    return (order[a.status] ?? 5) - (order[b.status] ?? 5);
-  });
-
-  const selected = new Set(); // ids
   const wrap = el('div');
+  const selectedItems = []; // { taskId, stepId, title }
+    const selectedIds = new Set();
 
-  wrap.appendChild(el('p', { style: 'font-size:12.5px;color:var(--ink-soft);margin:0 0 12px;' },
-    'Elegí las tareas que vas a hacer en esta salida. Podés reordenarlas después.'));
+    wrap.appendChild(el('p', { style: 'font-size:12.5px;color:var(--ink-soft);margin:0 0 12px;' },
+      'Elegí las tareas que vas a hacer en esta salida. Podés reordenarlas después.'));
 
-  const list = el('div', { style: 'display:flex;flex-direction:column;gap:6px;margin-bottom:14px;' });
-  for (const c of candidates) {
-    const row = el('div', { style: 'display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface);border:1px solid var(--line);border-radius:10px;cursor:pointer;' });
-    const chk = el('div', { style: 'width:20px;height:20px;border-radius:5px;border:2px solid var(--line);flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:12px;' });
-    const lbl = el('div', { style: 'flex:1;min-width:0;' }, [
-      el('div', { style: 'font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' }, c.title),
-      c.due ? el('div', { style: 'font-size:11px;color:var(--ink-soft);' }, formatDateEs(c.due)) : null,
-    ]);
-    row.appendChild(chk);
-    row.appendChild(lbl);
-    row.addEventListener('click', () => {
-      if (selected.has(c.id)) {
-        selected.delete(c.id);
-        chk.textContent = '';
-        chk.style.background = '';
-        chk.style.borderColor = 'var(--line)';
-        row.style.borderColor = 'var(--line)';
-      } else {
-        selected.add(c.id);
-        chk.textContent = '✓';
-        chk.style.color = '#fff';
-        chk.style.background = 'var(--teal)';
-        chk.style.borderColor = 'var(--teal)';
-        row.style.borderColor = 'var(--teal)';
+    // Selected preview with reorder
+    const previewEl = el('div', { style: 'display:flex;flex-direction:column;gap:4px;margin-bottom:10px;' });
+    function refreshPreview() {
+      previewEl.innerHTML = '';
+      if (!selectedItems.length) {
+        previewEl.appendChild(el('div', { style: 'font-size:12px;color:var(--ink-soft);padding:4px 0;' }, 'Nada seleccionado todavía.'));
+        return;
       }
+      selectedItems.forEach((it, idx) => {
+        const row = el('div', { style: 'display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--teal-soft);border-radius:8px;font-size:13px;' });
+        row.appendChild(el('div', { style: 'flex:1;' }, it.title));
+        if (idx > 0) row.appendChild(el('button', { style: 'border:none;background:none;cursor:pointer;color:var(--ink-soft);padding:0 3px;', onClick: () => { swap(selectedItems, idx, idx - 1); refreshPreview(); } }, '↑'));
+        if (idx < selectedItems.length - 1) row.appendChild(el('button', { style: 'border:none;background:none;cursor:pointer;color:var(--ink-soft);padding:0 3px;', onClick: () => { swap(selectedItems, idx, idx + 1); refreshPreview(); } }, '↓'));
+        row.appendChild(el('button', { style: 'border:none;background:none;cursor:pointer;color:var(--terracotta);padding:0 4px;', onClick: () => {
+          selectedIds.delete(it.taskId);
+          selectedItems.splice(idx, 1);
+          refreshPreview();
+          pickerWrap.innerHTML = '';
+          pickerWrap.appendChild(buildTaskPicker({ excludeTaskIds: selectedIds, onPick, onNewTask }));
+        } }, '✕'));
+        previewEl.appendChild(row);
+      });
+    }
+    refreshPreview();
+    wrap.appendChild(previewEl);
+
+    function onPick(task) {
+      if (selectedIds.has(task.id)) return;
+      selectedIds.add(task.id);
+      selectedItems.push({ taskId: task.id, stepId: null, title: task.title });
+      refreshPreview();
+    }
+    function onNewTask(title) {
+      const task = Store.createTask({ title, type: 'once', dueDate: todayISO() });
+      selectedIds.add(task.id);
+      selectedItems.push({ taskId: task.id, stepId: null, title });
+      refreshPreview();
+      toast(`"${title}" creada y agregada al viaje`);
+      pickerWrap.innerHTML = '';
+      pickerWrap.appendChild(buildTaskPicker({ excludeTaskIds: selectedIds, onPick, onNewTask }));
+    }
+
+    const pickerWrap = el('div');
+    pickerWrap.appendChild(buildTaskPicker({ excludeTaskIds: selectedIds, onPick, onNewTask, placeholder: 'Buscar tarea para la salida…' }));
+    wrap.appendChild(pickerWrap);
+
+    const startBtn = el('button', { class: 'btn btn-primary', style: 'margin-top:14px;' }, '🚗 Iniciar salida');
+    startBtn.addEventListener('click', () => {
+      if (!selectedItems.length) { toast('Elegí al menos una tarea.'); return; }
+      Store.startTrip(selectedItems.map(it => ({ ...it, done: false })));
+      closeSheet();
+      onRefreshHoy();
+      setTimeout(() => openActiveTripSheet(onRefreshHoy), 80);
     });
-    list.appendChild(row);
-  }
+    wrap.appendChild(startBtn);
 
-  // Manual add
-  const addNewRow = el('div', { style: 'display:flex;gap:8px;margin-top:6px;' });
-  const newInput = el('input', { type: 'text', placeholder: 'Agregar tarea específica para esta salida…', style: 'flex:1;' });
-  const addBtn = el('button', { class: 'btn btn-secondary', style: 'width:auto;padding:10px 14px;' }, '+');
-  addBtn.addEventListener('click', () => {
-    const title = newInput.value.trim();
-    if (!title) return;
-    const id = 'new:' + Date.now();
-    const task = Store.createTask({ title, type: 'once', dueDate: todayISO() });
-    selected.add('task:' + task.id);
-    // Add a visual row for it
-    const newRow = el('div', { style: 'display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--teal-soft);border:1.5px solid var(--teal);border-radius:10px;' }, [
-      el('div', { style: 'width:20px;height:20px;border-radius:5px;background:var(--teal);display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;' }, '✓'),
-      el('div', { style: 'font-size:13.5px;font-weight:500;' }, title),
-    ]);
-    list.insertBefore(newRow, list.lastChild?.nextSibling || null);
-    selected.add('task:' + task.id);
-    // Update the candidate to track it
-    candidates.push({ id: 'task:' + task.id, taskId: task.id, title, status: 'hoy' });
-    newInput.value = '';
-    toast('Tarea creada y agregada al viaje');
-  });
-  addNewRow.appendChild(newInput);
-  addNewRow.appendChild(addBtn);
-
-  const startBtn = el('button', { class: 'btn btn-primary', style: 'margin-top:14px;' }, '🚗 Iniciar salida');
-  startBtn.addEventListener('click', () => {
-    if (!selected.size) { toast('Elegí al menos una tarea.'); return; }
-    const items = candidates
-      .filter(c => selected.has(c.id))
-      .map(c => ({ taskId: c.taskId || null, title: c.title, done: false }));
-    Store.startTrip(items);
-    closeSheet();
-    onRefreshHoy();
-    // Immediately open the active trip sheet
-    setTimeout(() => openActiveTripSheet(onRefreshHoy), 80);
-  });
-
-  wrap.appendChild(list);
-  wrap.appendChild(addNewRow);
-  wrap.appendChild(startBtn);
-  openSheet(wrap, { title: '🚗 Planificar salida' });
+    openSheet(wrap, { title: '🚗 Planificar salida' });
 }
 
 // ---------- viaje activo: checklist reordenable ----------
@@ -167,9 +133,22 @@ export function openActiveTripSheet(onRefreshHoy) {
 
       const chk = el('div', { style: `width:24px;height:24px;border-radius:50%;border:2px solid ${item.done ? 'var(--olive)' : 'var(--line)'};background:${item.done ? 'var(--olive)' : 'transparent'};display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto;color:#fff;font-size:13px;` }, item.done ? '✓' : '');
       chk.addEventListener('click', () => {
-        Store.setTripItemDone(item.id, !item.done);
+        const nowDone = !item.done;
+        Store.setTripItemDone(item.id, nowDone);
+
+        // Also complete / uncomplete the real task or step
+        if (nowDone) {
+          if (item.taskId) {
+            Store.completeTask(item.taskId, { computeNextDueDate: R.computeNextDueDate });
+          } else if (item.stepId) {
+            Store.completeStepById(item.stepId);
+          }
+        } else {
+          if (item.taskId) Store.uncompleteTask(item.taskId);
+        }
+
         const updatedTrip = Store.getTrip();
-        // Check if all done → auto-end
+        // Auto-end when everything ticked
         if (updatedTrip && updatedTrip.items.every(i => i.done)) {
           Store.endTrip();
           closeSheet();
@@ -218,64 +197,33 @@ export function openActiveTripSheet(onRefreshHoy) {
       addExpanded = !addExpanded;
       addPanel.style.display = addExpanded ? '' : 'none';
       toggleBtn.textContent = addExpanded ? '− Cerrar' : '+ Agregar tareas';
+      if (addExpanded) pickerEl.focusSearch?.();
     });
 
     const addPanel = el('div', { style: 'display:none;margin-top:10px;' });
+    const currentIds = new Set((t.items).map(i => i.taskId).filter(Boolean));
 
-    // Quick-add: type title and add directly
-    const quickRow = el('div', { style: 'display:flex;gap:8px;margin-bottom:10px;' });
-    const quickInput = el('input', { type: 'text', placeholder: 'Nueva tarea rápida…', style: 'flex:1;' });
-    const quickBtn = el('button', { class: 'btn btn-primary', style: 'width:auto;padding:10px 14px;' }, '+');
-    quickBtn.addEventListener('click', () => {
-      const title = quickInput.value.trim();
-      if (!title) return;
-      const task = Store.createTask({ title, type: 'once', dueDate: todayISO() });
-      const current = Store.getTrip();
-      Store.updateTripItems([...current.items, { id: Store.uid(), taskId: task.id, title, done: false }]);
-      quickInput.value = '';
-      toast(`"${title}" agregada`);
-      rebuild();
+    const pickerEl = buildTaskPicker({
+      excludeTaskIds: currentIds,
+      onPick: (task) => {
+        const cur = Store.getTrip();
+        Store.updateTripItems([...cur.items, { id: Store.uid(), taskId: task.id, stepId: null, title: task.title, done: false }]);
+        onRefreshHoy();
+        rebuild();
+        toast(`"${task.title}" agregada`);
+      },
+      onNewTask: (title) => {
+        const task = Store.createTask({ title, type: 'once', dueDate: todayISO() });
+        const cur = Store.getTrip();
+        Store.updateTripItems([...cur.items, { id: Store.uid(), taskId: task.id, stepId: null, title, done: false }]);
+        onRefreshHoy();
+        rebuild();
+        toast(`"${title}" creada y agregada`);
+      },
+      placeholder: 'Buscar tarea para agregar…',
     });
-    quickRow.appendChild(quickInput);
-    quickRow.appendChild(quickBtn);
-    addPanel.appendChild(quickRow);
 
-    // Pick from existing tasks not already in this trip
-    const currentTrip = Store.getTrip();
-    const alreadyIn = new Set((currentTrip?.items || []).map(i => i.taskId).filter(Boolean));
-    const available = Store.listTasks()
-      .filter(t => !t.archived && !(t.type === 'once' && t.completed) && !alreadyIn.has(t.id));
-
-    if (available.length) {
-      addPanel.appendChild(el('div', { style: 'font-size:11.5px;color:var(--ink-soft);margin-bottom:6px;' }, 'O elegí de tus tareas:'));
-      const pickList = el('div', { style: 'display:flex;flex-direction:column;gap:5px;max-height:200px;overflow-y:auto;' });
-      for (const t of available) {
-        const row = el('div', { style: 'display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface);border:1px solid var(--line);border-radius:9px;cursor:pointer;' });
-        row.appendChild(el('div', { style: 'flex:1;font-size:13.5px;' }, t.title));
-        const addTaskBtn = el('button', { class: 'btn btn-secondary', style: 'width:auto;padding:5px 10px;font-size:12px;' }, 'Agregar');
-        addTaskBtn.addEventListener('click', () => {
-          const cur = Store.getTrip();
-          Store.updateTripItems([...cur.items, { id: Store.uid(), taskId: t.id, title: t.title, done: false }]);
-          row.style.opacity = '0.4';
-          row.style.pointerEvents = 'none';
-          addTaskBtn.textContent = '✓';
-          toast(`"${t.title}" agregada`);
-          onRefreshHoy();
-          // Partial rebuild — just update count and progress without closing
-          const newTrip = Store.getTrip();
-          const d = newTrip.items.filter(i => i.done).length;
-          const tot = newTrip.items.length;
-          progressLabel.textContent = `${d}/${tot} completadas`;
-          progressFill.style.width = `${Math.round(d / tot * 100)}%`;
-        });
-        row.appendChild(addTaskBtn);
-        pickList.appendChild(row);
-      }
-      addPanel.appendChild(pickList);
-    } else {
-      addPanel.appendChild(el('div', { style: 'font-size:12px;color:var(--ink-soft);' }, 'No quedan tareas para agregar.'));
-    }
-
+    addPanel.appendChild(pickerEl);
     addSection.appendChild(toggleBtn);
     addSection.appendChild(addPanel);
     wrap.appendChild(addSection);

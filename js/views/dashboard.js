@@ -5,6 +5,7 @@ import * as R from '../recurrence.js';
 import * as Push from '../push.js';
 import * as Weather from '../weather.js';
 import { renderTripPill, openActiveTripSheet } from './trip.js';
+import { renderTodayListPill } from './todayList.js';
 
 export const fab = null;
 
@@ -54,6 +55,7 @@ export async function render(container) {
   if (special) pillRow.appendChild(el('span', { class: 'header-pill special-day' }, `${special.type === 'feriado' ? '📌' : '🌿'} ${special.label}`));
   else if (weekend) pillRow.appendChild(el('span', { class: 'header-pill special-day' }, '🌤️ Fin de semana'));
   const refresh = () => { container.innerHTML = ''; render(container); };
+  renderTodayListPill(pillRow, refresh);
   renderTripPill(pillRow, refresh);
   container.appendChild(pillRow);
 
