@@ -286,6 +286,8 @@ textarea { resize: vertical; min-height: 60px; }
 .header-pill.special-day { background: var(--teal-soft); border-color: var(--teal); color: var(--teal); }
 .trip-pill { cursor: pointer; background: var(--surface-2); }
 .trip-pill.trip-active { background: var(--terracotta); border-color: var(--terracotta); color: #fff; }
+.today-list-pill { cursor: pointer; background: var(--surface-2); }
+.today-list-pill.today-list-active { background: var(--olive); border-color: var(--olive); color: #fff; }
 
 .toast {
   position: fixed; bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 14px); left: 50%; transform: translateX(-50%);
