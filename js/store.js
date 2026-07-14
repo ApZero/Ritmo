@@ -59,6 +59,7 @@ function defaultData() {
     projects: [],
     specialDays: [], // feriados / días libres puntuales — los fines de semana se calculan, no se guardan
     trip: null, // { id, items:[{id,taskId?,title,done}], startedAt, endedAt|null }
+    todayList: null, // { items:[{id,taskId?,stepId?,title,done}] }
   };
 }
 
@@ -88,6 +89,7 @@ function migrate(data) {
   data.projects = data.projects || [];
   data.specialDays = data.specialDays || [];
   if (!('trip' in data)) data.trip = null;
+  if (!('todayList' in data)) data.todayList = null;
   return data;
 }
 
@@ -490,6 +492,21 @@ export function importBackup(json, { replace = true } = {}) {
 
 export { uid };
 
+/** Completa un paso de proyecto buscándolo en todos los proyectos. */
+export function completeStepById(stepId) {
+  const data = load();
+  for (const project of data.projects) {
+    const step = findStep(project.steps, stepId);
+    if (step) {
+      toggleStepCompleted(project.steps, stepId, true);
+      project.updatedAt = nowISO();
+      save();
+      return true;
+    }
+  }
+  return false;
+}
+
 // ---------- viaje / trip planner ----------
 
 export function getTrip() { return load().trip; }
@@ -531,5 +548,39 @@ export function endTrip() {
 export function clearTrip() {
   const data = load();
   data.trip = null;
+  save();
+}
+
+// ---------- lista de hoy ----------
+
+export function getTodayList() { return load().todayList; }
+
+export function startTodayList(items) {
+  const data = load();
+  data.todayList = { items: items.map(it => ({ id: uid(), ...it, done: false })) };
+  save();
+  return data.todayList;
+}
+
+export function updateTodayListItems(items) {
+  const data = load();
+  if (!data.todayList) return null;
+  data.todayList.items = items;
+  save();
+  return data.todayList;
+}
+
+export function setTodayListItemDone(itemId, done) {
+  const data = load();
+  if (!data.todayList) return null;
+  const item = data.todayList.items.find(i => i.id === itemId);
+  if (item) item.done = done;
+  save();
+  return data.todayList;
+}
+
+export function clearTodayList() {
+  const data = load();
+  data.todayList = null;
   save();
 }
