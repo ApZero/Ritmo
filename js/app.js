@@ -102,6 +102,7 @@ function renderTabbar() {
 
 window.addEventListener('ritmo:change', () => {
   // Re-renderizar la vista actual cuando cambian los datos (ej. tras importar un respaldo).
+  // Si la vista activa es 'hoy', el pill row se reconstruye con el syncListItems actualizado.
   navigateTo(current);
 });
 

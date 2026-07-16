@@ -60,6 +60,7 @@ function defaultData() {
     specialDays: [], // feriados / días libres puntuales — los fines de semana se calculan, no se guardan
     trip: null, // { id, items:[{id,taskId?,title,done}], startedAt, endedAt|null }
     todayList: null, // { items:[{id,taskId?,stepId?,title,done}] }
+    habits: [],
   };
 }
 
@@ -90,6 +91,7 @@ function migrate(data) {
   data.specialDays = data.specialDays || [];
   if (!('trip' in data)) data.trip = null;
   if (!('todayList' in data)) data.todayList = null;
+  data.habits = data.habits || [];
   return data;
 }
 
@@ -583,4 +585,84 @@ export function clearTodayList() {
   const data = load();
   data.todayList = null;
   save();
+}
+
+/**
+ * Reconcilia los ítems de un viaje o lista de hoy con el estado actual de las
+ * tareas en el store. Devuelve { items, changed }.
+ * - Si una tarea fue renombrada: actualiza el título.
+ * - Si una tarea 'once' fue completada fuera de la lista: marca el ítem como done.
+ * - Si una tarea fue descompletada fuera de la lista: revierte done a false.
+ * - Si la tarea fue eliminada: conserva el ítem con su título como referencia.
+ */
+export function syncListItems(items) {
+  let changed = false;
+  const synced = items.map(item => {
+    if (!item.taskId) return item;
+    const task = getTask(item.taskId);
+    if (!task) return item; // tarea borrada — conservar como referencia
+    const externalDone = task.type === 'once' ? task.completed : false;
+    const newDone = item.done || externalDone;
+    const titleOk = task.title === item.title;
+    const doneOk = newDone === item.done;
+    if (titleOk && doneOk) return item;
+    changed = true;
+    return { ...item, title: task.title, done: newDone };
+  });
+  return { items: synced, changed };
+}
+
+// ---------- hábitos ----------
+// rule: {
+//   type: 'daily' | 'times_per_week' | 'specific_days' | 'times_per_month',
+//   timesPerWeek?: number,
+//   timesPerMonth?: number,
+//   weekdays?: number[],  // 0=dom … 6=sáb
+// }
+// entries: string[] — array de 'YYYY-MM-DD' marcados
+
+export function listHabits() { return load().habits; }
+export function getHabit(id) { return load().habits.find(h => h.id === id) || null; }
+
+export function createHabit({ name, icon, color, rule, startDate, notes }) {
+  const data = load();
+  const habit = {
+    id: uid(), name, icon: icon || '⭐', color: color || '#748B5C',
+    rule: rule || { type: 'daily' },
+    startDate: startDate || nowISO().slice(0, 10),
+    notes: notes || '',
+    entries: [],
+    archived: false,
+    createdAt: nowISO(),
+  };
+  data.habits.push(habit);
+  save();
+  return habit;
+}
+
+export function updateHabit(id, patch) {
+  const data = load();
+  const h = data.habits.find(h => h.id === id);
+  if (!h) return null;
+  Object.assign(h, patch);
+  save();
+  return h;
+}
+
+export function deleteHabit(id) {
+  const data = load();
+  data.habits = data.habits.filter(h => h.id !== id);
+  save();
+}
+
+/** Marca o desmarca una fecha en el historial de un hábito. */
+export function toggleHabitEntry(id, dateStr) {
+  const data = load();
+  const h = data.habits.find(h => h.id === id);
+  if (!h) return null;
+  const idx = h.entries.indexOf(dateStr);
+  if (idx >= 0) h.entries.splice(idx, 1);
+  else h.entries.push(dateStr);
+  save();
+  return h;
 }
