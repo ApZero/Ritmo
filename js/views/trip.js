@@ -14,15 +14,19 @@ function swap(arr, i, j) { [arr[i], arr[j]] = [arr[j], arr[i]]; }
 
 /** Renderiza el pill/botón del viaje en el header de Hoy. */
 export function renderTripPill(container, onRefreshHoy) {
-  const trip = Store.getTrip();
-  const hasTrip = trip && !trip.endedAt;
+  let trip = Store.getTrip();
+  if (trip) {
+    const { items: synced, changed } = Store.syncListItems(trip.items);
+    if (changed) { Store.updateTripItems(synced); trip = Store.getTrip(); }
+    if (trip && trip.items.every(i => i.done)) { Store.endTrip(); trip = null; }
+  }
+  const hasTrip = !!trip;
+  const pending = hasTrip ? trip.items.filter(i => !i.done).length : 0;
   const pill = el('button', {
     class: 'header-pill trip-pill' + (hasTrip ? ' trip-active' : ''),
     title: hasTrip ? 'Viaje en curso' : 'Planificar salida',
   });
-  pill.innerHTML = hasTrip
-    ? `🚗 <span>${trip.items.filter(i => !i.done).length} pendientes</span>`
-    : '🚗';
+  pill.innerHTML = hasTrip ? `🚗 <span>${pending} pendientes</span>` : '🚗';
   pill.addEventListener('click', () => openTripSheet(onRefreshHoy));
   container.appendChild(pill);
 }
@@ -116,8 +120,11 @@ export function openActiveTripSheet(onRefreshHoy) {
 
   function rebuild() {
     wrap.innerHTML = '';
-    const t = Store.getTrip();
+    let t = Store.getTrip();
     if (!t) return;
+    // Sync with live task store (title changes, completions done outside this sheet)
+    const { items: synced, changed } = Store.syncListItems(t.items);
+    if (changed) { Store.updateTripItems(synced); t = Store.getTrip(); }
     const done = t.items.filter(i => i.done).length;
     const total = t.items.length;
     const progressLabel = el('div', { style: 'font-size:12.5px;color:var(--ink-soft);' }, `${done}/${total} completadas`);

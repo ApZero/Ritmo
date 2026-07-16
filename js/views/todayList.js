@@ -13,7 +13,11 @@ function swap(arr, i, j) { [arr[i], arr[j]] = [arr[j], arr[i]]; }
 
 /** Renderiza el pill de la lista de hoy en el header. */
 export function renderTodayListPill(container, onRefresh) {
-  const list = Store.getTodayList();
+  let list = Store.getTodayList();
+  if (list) {
+    const { items: synced, changed } = Store.syncListItems(list.items);
+    if (changed) { Store.updateTodayListItems(synced); list = Store.getTodayList(); }
+  }
   const hasItems = list && list.items.length > 0;
   const pending = hasItems ? list.items.filter(i => !i.done).length : 0;
   const pill = el('button', {
@@ -119,8 +123,11 @@ function openActiveSheet(onRefresh) {
 
   function rebuild() {
     wrap.innerHTML = '';
-    const list = Store.getTodayList();
+    let list = Store.getTodayList();
     if (!list) return;
+    // Sync with live task store
+    const { items: synced, changed } = Store.syncListItems(list.items);
+    if (changed) { Store.updateTodayListItems(synced); list = Store.getTodayList(); }
     const done = list.items.filter(i => i.done).length;
     const total = list.items.length;
 

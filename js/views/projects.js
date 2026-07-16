@@ -5,23 +5,25 @@ import * as R from '../recurrence.js';
 import * as Push from '../push.js';
 import { renderStepTree } from './stepTree.js';
 import { openTaskFormExternal } from './tasks.js';
+import { renderHabitList, fab as habitFab } from './habits.js';
 
 // ─── sub-tab state ─────────────────────────────────────────────────────────
-let activeTab = 'proyectos'; // 'proyectos' | 'diaslibres'
+let activeTab = 'proyectos'; // 'proyectos' | 'habitos' | 'diaslibres'
 
 export const fab = {
   label: 'Nuevo',
   onClick: () => {
     if (activeTab === 'proyectos') openProjectForm(null);
-    else openNewTaskForDay(null); // opens a quick-add for today when no date is selected
+    else if (activeTab === 'habitos') habitFab.onClick();
+    else openNewTaskForDay(null);
   },
 };
 
 export function render(container) {
   // Sub-tab bar
   const tabBar = el('div', { class: 'segmented', style: 'margin:0 18px 14px;' });
-  for (const [id, label] of [['proyectos', '🗂️ Proyectos'], ['diaslibres', '🌿 Días libres']]) {
-    const b = el('button', { class: id === activeTab ? 'active' : '' }, label);
+  for (const [id, label] of [['proyectos', '🗂️ Proyectos'], ['habitos', '🌱 Hábitos'], ['diaslibres', '🌿 Días libres']]) {
+    const b = el('button', { class: id === activeTab ? 'active' : '', style: 'font-size:12.5px;' }, label);
     b.addEventListener('click', () => {
       activeTab = id;
       const v = document.getElementById('view');
@@ -33,6 +35,7 @@ export function render(container) {
   container.appendChild(tabBar);
 
   if (activeTab === 'proyectos') renderProyectos(container);
+  else if (activeTab === 'habitos') renderHabitList(container);
   else renderDiasLibres(container);
 }
 
