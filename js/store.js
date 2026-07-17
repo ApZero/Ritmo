@@ -61,6 +61,7 @@ function defaultData() {
     trip: null, // { id, items:[{id,taskId?,title,done}], startedAt, endedAt|null }
     todayList: null, // { items:[{id,taskId?,stepId?,title,done}] }
     habits: [],
+    bitacora: [], // producción casera: sauerkraut, yogurt, etc.
   };
 }
 
@@ -92,6 +93,7 @@ function migrate(data) {
   if (!('trip' in data)) data.trip = null;
   if (!('todayList' in data)) data.todayList = null;
   data.habits = data.habits || [];
+  data.bitacora = data.bitacora || [];
   return data;
 }
 
@@ -665,4 +667,74 @@ export function toggleHabitEntry(id, dateStr) {
   else h.entries.push(dateStr);
   save();
   return h;
+}
+
+// ---------- bitácora ----------
+// item: { id, name, icon, unit, avgDurationDays, storePrice, selfMadePrice, notes, batches[], archived, createdAt }
+// batch: { id, date, amount, notes, costOverride? }
+
+export function listBitacora() { return load().bitacora; }
+export function getBitacoraItem(id) { return load().bitacora.find(b => b.id === id) || null; }
+
+export function createBitacoraItem({ name, icon, unit, avgDurationDays, storePrice, selfMadePrice, notes }) {
+  const data = load();
+  const item = {
+    id: uid(), name, icon: icon || '🫙', unit: unit || 'L',
+    avgDurationDays: Number(avgDurationDays) || 30,
+    storePrice: Number(storePrice) || 0,
+    selfMadePrice: Number(selfMadePrice) || 0,
+    notes: notes || '',
+    batches: [],
+    archived: false,
+    createdAt: nowISO(),
+  };
+  data.bitacora.push(item);
+  save();
+  return item;
+}
+
+export function updateBitacoraItem(id, patch) {
+  const data = load();
+  const item = data.bitacora.find(b => b.id === id);
+  if (!item) return null;
+  Object.assign(item, patch);
+  save();
+  return item;
+}
+
+export function deleteBitacoraItem(id) {
+  const data = load();
+  data.bitacora = data.bitacora.filter(b => b.id !== id);
+  save();
+}
+
+export function addBatch(itemId, { date, amount, notes, costOverride }) {
+  const data = load();
+  const item = data.bitacora.find(b => b.id === itemId);
+  if (!item) return null;
+  const batch = { id: uid(), date: date || nowISO().slice(0, 10), amount: Number(amount) || 0, notes: notes || '', costOverride: costOverride != null ? Number(costOverride) : null };
+  item.batches.push(batch);
+  item.batches.sort((a, b) => b.date.localeCompare(a.date));
+  save();
+  return batch;
+}
+
+export function updateBatch(itemId, batchId, patch) {
+  const data = load();
+  const item = data.bitacora.find(b => b.id === itemId);
+  if (!item) return null;
+  const batch = item.batches.find(b => b.id === batchId);
+  if (!batch) return null;
+  Object.assign(batch, patch);
+  item.batches.sort((a, b) => b.date.localeCompare(a.date));
+  save();
+  return batch;
+}
+
+export function deleteBatch(itemId, batchId) {
+  const data = load();
+  const item = data.bitacora.find(b => b.id === itemId);
+  if (!item) return null;
+  item.batches = item.batches.filter(b => b.id !== batchId);
+  save();
 }
