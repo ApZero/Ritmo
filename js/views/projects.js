@@ -6,23 +6,32 @@ import * as Push from '../push.js';
 import { renderStepTree } from './stepTree.js';
 import { openTaskFormExternal } from './tasks.js';
 import { renderHabitList, fab as habitFab } from './habits.js';
+import { renderBitacoraList, fab as bitacoraFab } from './bitacora.js';
 
 // ─── sub-tab state ─────────────────────────────────────────────────────────
-let activeTab = 'proyectos'; // 'proyectos' | 'habitos' | 'diaslibres'
+let activeTab = 'proyectos'; // 'proyectos' | 'habitos' | 'bitacora' | 'diaslibres'
 
 export const fab = {
   label: 'Nuevo',
   onClick: () => {
     if (activeTab === 'proyectos') openProjectForm(null);
     else if (activeTab === 'habitos') habitFab.onClick();
+    else if (activeTab === 'bitacora') bitacoraFab.onClick();
     else openNewTaskForDay(null);
   },
 };
 
 export function render(container) {
-  // Sub-tab bar
-  const tabBar = el('div', { class: 'segmented', style: 'margin:0 18px 14px;' });
-  for (const [id, label] of [['proyectos', '🗂️ Proyectos'], ['habitos', '🌱 Hábitos'], ['diaslibres', '🌿 Días libres']]) {
+  // Sub-tab bar — two rows of two to avoid crowding on mobile
+  const tabBar = el('div', { style: 'margin:0 18px 14px;display:flex;flex-direction:column;gap:4px;' });
+  const row1 = el('div', { class: 'segmented' });
+  const row2 = el('div', { class: 'segmented' });
+  for (const [id, label, row] of [
+    ['proyectos', '🗂️ Proyectos', row1],
+    ['habitos', '🌱 Hábitos', row1],
+    ['bitacora', '🫙 Bitácora', row2],
+    ['diaslibres', '🌿 Días libres', row2],
+  ]) {
     const b = el('button', { class: id === activeTab ? 'active' : '', style: 'font-size:12.5px;' }, label);
     b.addEventListener('click', () => {
       activeTab = id;
@@ -30,12 +39,15 @@ export function render(container) {
       v.innerHTML = '';
       render(v);
     });
-    tabBar.appendChild(b);
+    row.appendChild(b);
   }
+  tabBar.appendChild(row1);
+  tabBar.appendChild(row2);
   container.appendChild(tabBar);
 
   if (activeTab === 'proyectos') renderProyectos(container);
   else if (activeTab === 'habitos') renderHabitList(container);
+  else if (activeTab === 'bitacora') renderBitacoraList(container);
   else renderDiasLibres(container);
 }
 
