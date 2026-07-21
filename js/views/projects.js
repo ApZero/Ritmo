@@ -7,9 +7,10 @@ import { renderStepTree } from './stepTree.js';
 import { openTaskFormExternal } from './tasks.js';
 import { renderHabitList, fab as habitFab } from './habits.js';
 import { renderBitacoraList, fab as bitacoraFab } from './bitacora.js';
+import { renderSuppliesList, fab as suppliesFab } from './supplies.js';
 
 // ─── sub-tab state ─────────────────────────────────────────────────────────
-let activeTab = 'proyectos'; // 'proyectos' | 'habitos' | 'bitacora' | 'diaslibres'
+let activeTab = 'proyectos'; // 'proyectos' | 'habitos' | 'bitacora' | 'suministros' | 'diaslibres'
 
 export const fab = {
   label: 'Nuevo',
@@ -17,38 +18,39 @@ export const fab = {
     if (activeTab === 'proyectos') openProjectForm(null);
     else if (activeTab === 'habitos') habitFab.onClick();
     else if (activeTab === 'bitacora') bitacoraFab.onClick();
+    else if (activeTab === 'suministros') suppliesFab.onClick();
     else openNewTaskForDay(null);
   },
 };
 
+const TABS = [
+  ['proyectos', '🗂️ Proyectos'],
+  ['habitos',   '🌱 Hábitos'],
+  ['bitacora',  '🫙 Bitácora'],
+  ['suministros','🧴 Suministros'],
+  ['diaslibres','🌿 Días libres'],
+];
+
 export function render(container) {
-  // Sub-tab bar — two rows of two to avoid crowding on mobile
-  const tabBar = el('div', { style: 'margin:0 18px 14px;display:flex;flex-direction:column;gap:4px;' });
-  const row1 = el('div', { class: 'segmented' });
-  const row2 = el('div', { class: 'segmented' });
-  for (const [id, label, row] of [
-    ['proyectos', '🗂️ Proyectos', row1],
-    ['habitos', '🌱 Hábitos', row1],
-    ['bitacora', '🫙 Bitácora', row2],
-    ['diaslibres', '🌿 Días libres', row2],
-  ]) {
-    const b = el('button', { class: id === activeTab ? 'active' : '', style: 'font-size:12.5px;' }, label);
-    b.addEventListener('click', () => {
+  // Horizontally scrollable chip row — scales to any number of tabs
+  const chipRow = el('div', { style: 'display:flex;gap:7px;padding:0 18px 14px;overflow-x:auto;scrollbar-width:none;' });
+  for (const [id, label] of TABS) {
+    const chip = el('button', { class: 'chip' + (id === activeTab ? ' active' : '') }, label);
+    chip.addEventListener('click', () => {
       activeTab = id;
       const v = document.getElementById('view');
       v.innerHTML = '';
       render(v);
     });
-    row.appendChild(b);
+    chipRow.appendChild(chip);
   }
-  tabBar.appendChild(row1);
-  tabBar.appendChild(row2);
-  container.appendChild(tabBar);
+  container.appendChild(chipRow);
 
-  if (activeTab === 'proyectos') renderProyectos(container);
-  else if (activeTab === 'habitos') renderHabitList(container);
-  else if (activeTab === 'bitacora') renderBitacoraList(container);
-  else renderDiasLibres(container);
+  if      (activeTab === 'proyectos')   renderProyectos(container);
+  else if (activeTab === 'habitos')     renderHabitList(container);
+  else if (activeTab === 'bitacora')    renderBitacoraList(container);
+  else if (activeTab === 'suministros') renderSuppliesList(container);
+  else                                   renderDiasLibres(container);
 }
 
 // ─── Proyectos ──────────────────────────────────────────────────────────────
