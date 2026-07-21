@@ -61,7 +61,8 @@ function defaultData() {
     trip: null, // { id, items:[{id,taskId?,title,done}], startedAt, endedAt|null }
     todayList: null, // { items:[{id,taskId?,stepId?,title,done}] }
     habits: [],
-    bitacora: [], // producción casera: sauerkraut, yogurt, etc.
+    bitacora: [],
+    supplies: [], // suministros: pasta de dientes, jabón, etc.
   };
 }
 
@@ -94,6 +95,7 @@ function migrate(data) {
   if (!('todayList' in data)) data.todayList = null;
   data.habits = data.habits || [];
   data.bitacora = data.bitacora || [];
+  data.supplies = data.supplies || [];
   return data;
 }
 
@@ -738,3 +740,91 @@ export function deleteBatch(itemId, batchId) {
   item.batches = item.batches.filter(b => b.id !== batchId);
   save();
 }
+
+// ---------- suministros de higiene ----------
+// item: { id, name, icon, unit, peopleCount, purchaseSize, estimatedDailyPerPerson, notes, batches[], archived, createdAt }
+// batch: { id, startDate, endDate|null, quantity, notes }
+
+export function listSupplies() { return load().supplies; }
+export function getSupply(id) { return load().supplies.find(s => s.id === id) || null; }
+
+export function createSupply({ name, icon, unit, peopleCount, purchaseSize, estimatedDailyPerPerson, notes }) {
+  const data = load();
+  const item = {
+    id: uid(), name, icon: icon || '🧴', unit: unit || 'ml',
+    peopleCount: Number(peopleCount) || 1,
+    purchaseSize: Number(purchaseSize) || 0,
+    estimatedDailyPerPerson: Number(estimatedDailyPerPerson) || 0,
+    notes: notes || '',
+    batches: [],
+    archived: false,
+    createdAt: nowISO(),
+  };
+  data.supplies.push(item);
+  save();
+  return item;
+}
+
+export function updateSupply(id, patch) {
+  const data = load();
+  const item = data.supplies.find(s => s.id === id);
+  if (!item) return null;
+  Object.assign(item, patch);
+  save();
+  return item;
+}
+
+export function deleteSupply(id) {
+  const data = load();
+  data.supplies = data.supplies.filter(s => s.id !== id);
+  save();
+}
+
+export function addSupplyBatch(supplyId, { startDate, quantity, notes }) {
+  const data = load();
+  const item = data.supplies.find(s => s.id === supplyId);
+  if (!item) return null;
+  // Close any open batch first
+  const open = item.batches.find(b => !b.endDate);
+  if (open && !open.endDate) open.endDate = startDate || nowISO().slice(0, 10);
+  const batch = { id: uid(), startDate: startDate || nowISO().slice(0, 10), endDate: null, quantity: Number(quantity) || 0, notes: notes || '' };
+  item.batches.push(batch);
+  item.batches.sort((a, b) => b.startDate.localeCompare(a.startDate));
+  save();
+  return batch;
+}
+
+export function closeSupplyBatch(supplyId, batchId, endDate) {
+  const data = load();
+  const item = data.supplies.find(s => s.id === supplyId);
+  if (!item) return null;
+  const batch = item.batches.find(b => b.id === batchId);
+  if (!batch) return null;
+  batch.endDate = endDate || nowISO().slice(0, 10);
+  save();
+  return batch;
+}
+
+export function updateSupplyBatch(supplyId, batchId, patch) {
+  const data = load();
+  const item = data.supplies.find(s => s.id === supplyId);
+  if (!item) return null;
+  const batch = item.batches.find(b => b.id === batchId);
+  if (!batch) return null;
+  Object.assign(batch, patch);
+  item.batches.sort((a, b) => b.startDate.localeCompare(a.startDate));
+  save();
+  return batch;
+}
+
+export function deleteSupplyBatch(supplyId, batchId) {
+  const data = load();
+  const item = data.supplies.find(s => s.id === supplyId);
+  if (!item) return null;
+  item.batches = item.batches.filter(b => b.id !== batchId);
+  save();
+}
+
+// alias so supplies.js can use the more natural name
+export const finishSupplyBatch = closeSupplyBatch;
+
